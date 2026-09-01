@@ -12,7 +12,6 @@
 <title>Crane Service Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root{
@@ -354,6 +353,7 @@
   <button class="action-btn outline" id="btnPrint" type="button">🖨️ Print</button>
   <button class="action-btn outline" id="btnPdf" type="button">📄 Download PDF</button>
   <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
+  <button class="action-btn outline" id="btnCopyText" type="button">📋 Copy report text</button>
   <button class="action-btn outline" id="btnOnedrive" type="button">☁️ Save to OneDrive</button>
 </div>
 <div class="status-msg no-print" id="statusMsg"></div>
@@ -779,28 +779,153 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
 document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
 
 // ---------- PDF ----------
-async function buildPdfBlob(){
-  const el = document.getElementById('app');
-  const canvas = await html2canvas(el, {scale:2, backgroundColor:'#f7f8fa', useCORS:true});
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF('p','pt','a4');
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = canvas.height * imgWidth / canvas.width;
-  let heightLeft = imgHeight;
-  let position = 0;
-  const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-  pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-  while(heightLeft > 0){
-    position = heightLeft - imgHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
+function statusColor(key){
+  switch(key){
+    case 'SERV':    return [28,156,74];
+    case 'URGENT':  return [216,30,44];
+    case 'ATTN':    return [201,168,0];
+    case 'MONITOR': return [224,138,28];
+    case 'NA':      return [47,111,176];
+    default:        return [200,204,209];
   }
-  return pdf;
+}
+function statusLabel(key){
+  const s = STATUS.find(s=>s.key===key);
+  return s ? s.label : 'Not checked';
+}
+
+async function buildPdfBlob(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','pt','a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const bottomLimit = pageH - 36;
+  let y = margin;
+
+  // header band
+  doc.setFillColor(22,27,34);
+  doc.rect(0,0,pageW,66,'F');
+  doc.setTextColor(245,184,0);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.text('KEY ENGINEERING (CHESTERFIELD) LTD', margin, 24);
+  doc.setTextColor(255,255,255); doc.setFontSize(17);
+  doc.text('Crane Service Report', margin, 48);
+  y = 86;
+
+  // info grid (two columns)
+  const colW = (pageW - margin*2)/2;
+  const infoLeft = [
+    ['Customer', state.customer||'—'],
+    ['Manufacturer', state.manufacturer||'—'],
+    ['Identification No.', state.idno||'—'],
+    ['Crane number', state.number||'—']
+  ];
+  const infoRight = [
+    ['Date', state.date||'—'],
+    ['Engineer', state.engineer||'—'],
+    ['Type of visit', state.visitType||'—'],
+    ['Hoist WLL / Falls', (state.wll||'—')+' / '+(state.falls||'—')]
+  ];
+  doc.setFontSize(9);
+  infoLeft.forEach((row,i)=>{
+    const ry = y + i*15;
+    doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30); doc.text(row[0]+':', margin, ry);
+    doc.setFont('helvetica','normal'); doc.text(String(row[1]), margin+108, ry);
+  });
+  infoRight.forEach((row,i)=>{
+    const ry = y + i*15;
+    doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30); doc.text(row[0]+':', margin+colW, ry);
+    doc.setFont('helvetica','normal'); doc.text(String(row[1]), margin+colW+108, ry);
+  });
+  y += infoLeft.length*15 + 12;
+  doc.setDrawColor(215,220,226); doc.line(margin,y,pageW-margin,y); y += 16;
+
+  // findings
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,20,20);
+  doc.text('Highlighted Findings', margin, y); y += 13;
+  const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN');
+  doc.setFontSize(8.5);
+  if(findings.length===0){
+    doc.setFont('helvetica','italic'); doc.setTextColor(100,105,112);
+    doc.text('No urgent repairs or attention items were flagged during this visit.', margin, y);
+    y += 14;
+  } else {
+    findings.forEach(f=>{
+      const c = statusColor(f.status);
+      doc.setFillColor(c[0],c[1],c[2]); doc.rect(margin, y-7.5, 7.5, 7.5, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20);
+      doc.text(`${f.group} — ${f.label}  (${statusLabel(f.status)}${f.photo?', photo attached':''})`, margin+13, y);
+      y += 10.5;
+      if(f.note){
+        doc.setFont('helvetica','normal'); doc.setTextColor(90,95,102);
+        doc.splitTextToSize(f.note, pageW - margin*2 - 13).forEach(line=>{ doc.text(line, margin+13, y); y += 9.5; });
+      }
+      y += 3;
+    });
+  }
+  y += 6;
+  doc.setDrawColor(215,220,226); doc.line(margin,y,pageW-margin,y); y += 16;
+
+  // full checklist, compact
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,20,20);
+  doc.text('Full Inspection Checklist', margin, y); y += 12;
+  const rowH = 11;
+  CHECKLIST.forEach(g=>{
+    if(y > bottomLimit - 20){ doc.addPage(); y = margin; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(7.8); doc.setTextColor(50,55,62);
+    doc.text(g.group.toUpperCase(), margin, y); y += 10;
+    g.items.forEach(label=>{
+      if(y > bottomLimit){ doc.addPage(); y = margin; }
+      const id = slug(g.group)+'__'+slug(label);
+      const it = state.items[id];
+      const c = it.status ? statusColor(it.status) : [220,224,228];
+      doc.setFillColor(c[0],c[1],c[2]); doc.rect(margin+265, y-6.2, 7, 7, 'F');
+      doc.setFont('helvetica','normal'); doc.setFontSize(7.6); doc.setTextColor(65,70,77);
+      doc.text(label, margin+6, y);
+      doc.setFontSize(7); doc.setTextColor(c[0],c[1],c[2]);
+      doc.text(it.status ? statusLabel(it.status) : 'Not checked', margin+277, y);
+      y += rowH;
+    });
+    y += 3;
+  });
+
+  // general notes
+  if(state.notes && state.notes.trim()){
+    if(y > bottomLimit - 24){ doc.addPage(); y = margin; }
+    y += 6;
+    doc.setDrawColor(215,220,226); doc.line(margin,y,pageW-margin,y); y += 16;
+    doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(20,20,20);
+    doc.text('General Notes', margin, y); y += 12;
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(70,75,82);
+    doc.splitTextToSize(state.notes, pageW - margin*2).forEach(line=>{
+      if(y > bottomLimit){ doc.addPage(); y = margin; }
+      doc.text(line, margin, y); y += 10.5;
+    });
+  }
+
+  // photo appendix — only added when at least one finding has a photo
+  const photoItems = Object.values(state.items).filter(i=>i.photo);
+  if(photoItems.length){
+    doc.addPage();
+    let py = margin;
+    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(20,20,20);
+    doc.text('Finding Photos', margin, py); py += 22;
+    const gap = 20;
+    const cellW = (pageW - margin*2 - gap)/2;
+    const cellImgH = 150;
+    let col = 0;
+    photoItems.forEach(it=>{
+      if(col===0 && py + cellImgH + 26 > pageH - margin){ doc.addPage(); py = margin; }
+      const x = margin + col*(cellW+gap);
+      try{ doc.addImage(it.photo, 'JPEG', x, py, cellW, cellImgH); }catch(e){}
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(60,65,72);
+      doc.text(`${it.group} — ${it.label}`, x, py+cellImgH+12);
+      if(col===1){ col=0; py += cellImgH+30; } else { col=1; }
+    });
+  }
+
+  return doc;
 }
 
 function reportFilename(){
@@ -832,36 +957,60 @@ function findingsSummaryText(){
 // ---------- Email customer (opens the default mail app, pre-filled) ----------
 // A plain webpage cannot silently send mail on your behalf without a mail server
 // behind it — this opens your phone/computer's own mail app with everything
-// pre-filled. Download the PDF first (below) and attach it before sending.
-document.getElementById('btnEmail').addEventListener('click', ()=>{
-  if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
-  const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
-  const body = [
+// pre-filled. mailto: links silently fail once they get too long, so this
+// keeps the body short and points to the attached PDF for full detail;
+// use "Copy report text" below for the full version if you need it.
+function reportPlainText(full){
+  const findingsText = full ? findingsSummaryText()
+    : (()=>{
+        const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN');
+        return findings.length===0 ? 'None flagged.' : `${findings.length} item(s) flagged — see attached PDF for details.`;
+      })();
+  return [
     `Crane Service Report`,
-    `Customer: ${state.customer}`,
+    `Customer: ${state.customer||'—'}`,
     `Crane / ID No: ${state.idno || 'n/a'} (${state.manufacturer||'n/a'})`,
     `Type of visit: ${state.visitType}`,
     `Date: ${state.date}`,
     `Engineer: ${state.engineer || 'n/a'}`,
     ``,
     `Findings requiring attention:`,
-    findingsSummaryText(),
+    findingsText,
     ``,
     `General notes:`,
-    state.notes || '(none)',
+    full ? (state.notes || '(none)') : (state.notes ? state.notes.slice(0,200)+(state.notes.length>200?'…':'') : '(none)'),
     ``,
-    `(Please attach the PDF report before sending — download it with the Download PDF button.)`
+    `(Full details are in the attached PDF — download it with the Download PDF button and attach it before sending.)`
   ].join('\n');
+}
 
-  const mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  let opened = true;
-  try{ window.location.href = mailto; }catch(e){ opened = false; }
+document.getElementById('btnEmail').addEventListener('click', ()=>{
+  if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
+  const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
+  let body = reportPlainText(false);
 
-  // fallback: copy the text so it can be pasted into any mail/message app
-  // if the mail app hand-off gets blocked by a sandboxed preview
-  navigator.clipboard && navigator.clipboard.writeText(`To: ${state.email}\nSubject: ${subject}\n\n${body}`).catch(()=>{});
-  setStatusMsg('Opening your mail app with the report filled in (also copied to your clipboard as a backup — paste it into Mail/WhatsApp if nothing opened). Attach the downloaded PDF before sending.', 'ok');
+  // mailto: links silently fail past ~1800-2000 chars in most browsers —
+  // keep trimming until the whole URL is comfortably under that limit
+  let mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  if(mailto.length > 1700){
+    body = `Crane Service Report for ${state.customer||'—'} — ${state.date}.\nEngineer: ${state.engineer||'n/a'}.\nSee attached PDF for full findings and notes.`;
+    mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
+  window.location.href = mailto;
+  setStatusMsg('Opening your mail app to '+state.email+' — attach the downloaded PDF, then send. If nothing opens, use "Copy report text" instead and paste it into a new email manually.', 'ok');
 });
+
+document.getElementById('btnCopyText').addEventListener('click', async ()=>{
+  const text = (state.email ? `To: ${state.email}\n` : '') + reportPlainText(true);
+  try{
+    await navigator.clipboard.writeText(text);
+    setStatusMsg('Full report text copied — paste it into an email, message, or note.', 'ok');
+  }catch(e){
+    setStatusMsg('Could not copy automatically ('+e.message+'). Select and copy from the Notes field instead.', 'err');
+  }
+});
+
 
 // ---------- Save to OneDrive ----------
 // A downloaded HTML file can't silently log into your OneDrive and upload a

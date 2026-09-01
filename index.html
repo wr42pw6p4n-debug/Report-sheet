@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Crane Report">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<title>Crane Service Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root{
+    --steel-900:#161b22;
+    --steel-800:#232b36;
+    --steel-700:#333e4d;
+    --steel-100:#eef1f4;
+    --steel-50:#f7f8fa;
+    --line:#d7dce2;
+    --safety-yellow:#f5b800;
+    --safety-yellow-dark:#c99400;
+    --ink:#1a2027;
+    --ink-soft:#5a6572;
+    --serv:#1c9c4a;
+    --urgent:#d81e2c;
+    --attn:#e8c400;
+    --monitor:#e08a1c;
+    --na:#2f6fb0;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--steel-100);
+  }
+  .app{max-width:920px;margin:0 auto;padding-bottom:80px;}
+
+  /* Top bar */
+  .topbar{
+    background:linear-gradient(180deg,var(--steel-900),var(--steel-800));
+    color:#fff;
+    padding:18px 20px 16px;
+    position:relative;
+    overflow:hidden;
+  }
+  .topbar::after{
+    content:"";
+    position:absolute; right:-40px; top:-40px; width:160px; height:160px;
+    background:repeating-linear-gradient(45deg, var(--safety-yellow) 0 14px, #1a1a1a 14px 28px);
+    opacity:.12; border-radius:50%;
+  }
+  .company-name{
+    font-family:'Oswald',sans-serif;
+    font-weight:600;
+    font-size:13px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--safety-yellow);
+    margin:0 0 2px;
+  }
+  .report-title{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:24px;
+    letter-spacing:.01em;
+    margin:0;
+  }
+  .report-sub{
+    font-size:12.5px;
+    color:#aeb8c2;
+    margin-top:6px;
+  }
+
+  /* Sections */
+  .section{
+    background:#fff;
+    margin:14px 14px 0;
+    border-radius:var(--radius);
+    border:1px solid var(--line);
+    overflow:hidden;
+  }
+  .section-head{
+    display:flex; align-items:center; gap:8px;
+    padding:12px 16px;
+    background:var(--steel-50);
+    border-bottom:1px solid var(--line);
+  }
+  .section-tag{
+    width:6px; align-self:stretch; border-radius:3px;
+    background:var(--safety-yellow);
+    flex-shrink:0;
+  }
+  .section-head h2{
+    font-family:'Oswald',sans-serif;
+    font-size:14px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    margin:0;
+    color:var(--steel-800);
+  }
+  .section-body{padding:14px 16px 16px;}
+
+  /* form grid */
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px;}
+  .field{display:flex; flex-direction:column; gap:4px; margin-bottom:10px;}
+  .field.full{grid-column:1/-1;}
+  label{font-size:11.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+  input[type=text], input[type=email], input[type=date], input[type=number], select, textarea{
+    font-family:inherit; font-size:14.5px; padding:9px 10px;
+    border:1px solid var(--line); border-radius:7px; background:#fff; color:var(--ink);
+    width:100%;
+  }
+  input:focus, select:focus, textarea:focus{outline:2px solid var(--safety-yellow-dark); outline-offset:1px;}
+  textarea{resize:vertical; min-height:70px;}
+
+  .visit-toggle{display:flex; gap:8px;}
+  .visit-toggle button{
+    flex:1; padding:9px; border-radius:7px; border:1.5px solid var(--line);
+    background:#fff; font-weight:600; font-size:13.5px; cursor:pointer; color:var(--ink-soft);
+  }
+  .visit-toggle button.active{background:var(--steel-900); border-color:var(--steel-900); color:#fff;}
+
+  .company-row{display:flex; gap:8px; align-items:flex-end;}
+  .company-row .field{flex:1; margin-bottom:0;}
+  .btn-ghost{
+    padding:9px 12px; border-radius:7px; border:1.5px solid var(--steel-700); background:#fff;
+    color:var(--steel-800); font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap;
+  }
+  .btn-ghost:hover{background:var(--steel-100);}
+  #newCompanyForm{display:none; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
+  #newCompanyForm.open{display:block;}
+
+  /* legend */
+  .legend{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .legend span{
+    display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; color:var(--ink-soft);
+    padding:4px 8px; border-radius:20px; background:var(--steel-50); border:1px solid var(--line);
+  }
+  .legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+
+  /* checklist */
+  .subgroup-title{
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--steel-700); margin:16px 0 8px; padding-bottom:4px; border-bottom:2px solid var(--steel-900);
+  }
+  .subgroup-title:first-child{margin-top:0;}
+  .item-row{
+    border:1px solid var(--line); border-left-width:5px; border-radius:8px;
+    padding:10px 12px; margin-bottom:8px; transition:background .15s, border-color .15s;
+    background:#fff;
+  }
+  .item-row .item-top{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;}
+  .item-label{font-weight:600; font-size:14px;}
+  .status-buttons{display:flex; gap:5px; flex-wrap:wrap;}
+  .status-btn{
+    border:1.5px solid var(--line); background:#fff; border-radius:6px;
+    font-size:11px; font-weight:700; padding:5px 8px; cursor:pointer; color:var(--ink-soft);
+    letter-spacing:.02em;
+  }
+  .status-btn.on{color:#fff; border-color:transparent;}
+  .item-note{margin-top:8px; display:none;}
+  .item-note.show{display:block;}
+  .item-note input{font-size:13.5px; padding:7px 9px;}
+  .photo-row{display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;}
+  .photo-btn{
+    border:1.5px dashed var(--steel-700); background:#fff; border-radius:7px;
+    font-size:12px; font-weight:700; padding:7px 10px; cursor:pointer; color:var(--steel-800);
+    display:flex; align-items:center; gap:5px;
+  }
+  .photo-thumb{position:relative; width:56px; height:56px; border-radius:7px; overflow:hidden; border:1px solid var(--line);}
+  .photo-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .photo-remove{
+    position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%;
+    background:var(--urgent); color:#fff; border:none; font-size:11px; line-height:18px; text-align:center;
+    cursor:pointer; padding:0;
+  }
+  .finding-photo{width:56px; height:56px; border-radius:7px; object-fit:cover; flex-shrink:0; border:1px solid var(--line);}
+
+  /* findings summary */
+  .finding-card{
+    display:flex; gap:10px; padding:10px 12px; border-radius:8px; margin-bottom:8px;
+    border-left:5px solid var(--urgent); background:#fdf1f1;
+  }
+  .finding-card.attn{border-left-color:var(--attn); background:#fdfbe9;}
+  .finding-card .badge{
+    font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+    padding:2px 7px; border-radius:20px; color:#fff; align-self:flex-start; white-space:nowrap;
+  }
+  .finding-card .badge.urgent{background:var(--urgent);}
+  .finding-card .badge.attn{background:var(--monitor);}
+  .finding-empty{color:var(--ink-soft); font-size:13.5px; padding:6px 2px;}
+
+  /* action bar */
+  .action-bar{
+    position:sticky; bottom:0; z-index:20;
+    background:#fff; border-top:1px solid var(--line);
+    padding:10px 14px; display:flex; gap:8px; flex-wrap:wrap;
+    box-shadow:0 -4px 14px rgba(0,0,0,.06);
+  }
+  .action-btn{
+    flex:1 1 auto; min-width:120px; padding:11px 10px; border-radius:8px; border:none;
+    font-weight:700; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .action-btn.primary{background:var(--steel-900); color:#fff;}
+  .action-btn.yellow{background:var(--safety-yellow); color:var(--steel-900);}
+  .action-btn.outline{background:#fff; border:1.5px solid var(--steel-700); color:var(--steel-800);}
+  .action-btn:disabled{opacity:.55; cursor:progress;}
+  .action-btn:active{transform:translateY(1px);}
+
+  .status-msg{font-size:12.5px; padding:8px 16px; color:var(--ink-soft);}
+  .status-msg.err{color:var(--urgent); font-weight:600;}
+  .status-msg.ok{color:var(--serv); font-weight:600;}
+
+  .note-inline{font-size:11.5px; color:var(--ink-soft); margin-top:6px; line-height:1.5;}
+
+  select#reportHistorySelect{max-width:100%;}
+
+  @media (max-width:520px){
+    .grid{grid-template-columns:1fr;}
+  }
+  @media (min-width:768px){
+    .app{max-width:980px;}
+    .grid{grid-template-columns:1fr 1fr 1fr;}
+    .status-btn{padding:7px 12px; font-size:12px;}
+    .item-label{font-size:15px;}
+    .action-btn{min-width:150px; padding:13px 10px; font-size:14px;}
+    .report-title{font-size:28px;}
+  }
+
+  /* print */
+  @media print{
+    .action-bar, .no-print{display:none !important;}
+    body{background:#fff;}
+    .section{border:1px solid #999; break-inside:avoid; margin:8px 0;}
+    .topbar::after{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="topbar" id="sandboxBanner" style="display:none; background:#3a2200;">
+    <p class="company-name" style="color:#ffcf4d;">⚠ Get this into Safari first</p>
+    <h1 class="report-title" style="font-size:16px;">On iPad, "Open in Safari" isn't in the Files long-press menu</h1>
+    <p class="report-sub">
+      1. Files app → find this file → <b>tap once</b> to preview it (Quick Look opens)<br>
+      2. Tap the <b>Share icon</b> (square with an arrow, top-right of Quick Look) — not a long-press<br>
+      3. In the share sheet, scroll the row of app icons and tap <b>Safari</b><br>
+      4. Once it's open in Safari, tap <b>Aa</b> in the address bar → <b>Add to Home Screen</b> — it'll then open full-screen like a real app, ready for the crane yard, no re-downloading needed.
+    </p>
+  </div>
+
+  <div class="topbar">
+    <p class="company-name">Key Engineering (Chesterfield) Ltd</p>
+    <h1 class="report-title">Crane Service Report</h1>
+    <p class="report-sub" id="topbarSub">New report — not yet saved</p>
+  </div>
+
+  <!-- COMPANY / JOB DETAILS -->
+  <div class="section">
+    <div class="section-head"><div class="section-tag"></div><h2>Customer &amp; Job Details</h2></div>
+    <div class="section-body">
+      <div class="company-row">
+        <div class="field">
+          <label for="companySelect">Company on file</label>
+          <select id="companySelect"><option value="">— Select a saved company —</option></select>
+        </div>
+        <button class="btn-ghost" id="toggleNewCompany" type="button">+ New company</button>
+      </div>
+
+      <div id="newCompanyForm">
+        <div class="grid">
+          <div class="field"><label>Customer name</label><input type="text" id="nc_customer"></div>
+          <div class="field"><label>Manufacturer</label><input type="text" id="nc_manufacturer"></div>
+          <div class="field"><label>Identification No.</label><input type="text" id="nc_idno"></div>
+          <div class="field"><label>Crane number</label><input type="text" id="nc_number"></div>
+          <div class="field"><label>Hoist WLL</label><input type="text" id="nc_wll"></div>
+          <div class="field"><label>Falls</label><input type="text" id="nc_falls"></div>
+          <div class="field full"><label>Customer email (for report delivery)</label><input type="email" id="nc_email"></div>
+        </div>
+        <button class="btn-ghost" id="saveCompanyBtn" type="button">Save company to list</button>
+      </div>
+
+      <div class="grid" style="margin-top:14px;">
+        <div class="field"><label>Customer</label><input type="text" id="f_customer"></div>
+        <div class="field"><label>Manufacturer</label><input type="text" id="f_manufacturer"></div>
+        <div class="field"><label>Identification No.</label><input type="text" id="f_idno"></div>
+        <div class="field"><label>Crane number</label><input type="text" id="f_number"></div>
+        <div class="field"><label>Hoist WLL</label><input type="text" id="f_wll"></div>
+        <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
+        <div class="field"><label>Customer email</label><input type="email" id="f_email"></div>
+        <div class="field"><label>Date</label><input type="date" id="f_date"></div>
+        <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
+        <div class="field">
+          <label>Type of visit</label>
+          <div class="visit-toggle">
+            <button type="button" data-visit="Service" class="active">Service</button>
+            <button type="button" data-visit="Inspection">Inspection</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKLIST -->
+  <div class="section">
+    <div class="section-head"><div class="section-tag"></div><h2>Inspection Checklist</h2></div>
+    <div class="section-body">
+      <div class="legend" id="legend"></div>
+      <div id="checklistContainer"></div>
+    </div>
+  </div>
+
+  <!-- FINDINGS -->
+  <div class="section">
+    <div class="section-head"><div class="section-tag"></div><h2>Highlighted Findings</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Automatically collected from every item marked <b>Urgent Repair</b> or <b>Req's Attention</b> above — this is the at-a-glance repairs list.</p>
+      <div id="findingsList"></div>
+    </div>
+  </div>
+
+  <!-- NOTES -->
+  <div class="section">
+    <div class="section-head"><div class="section-tag"></div><h2>General Notes</h2></div>
+    <div class="section-body">
+      <textarea id="f_notes" placeholder="Overall observations, recommendations, parts to order..."></textarea>
+    </div>
+  </div>
+
+  <!-- PAST REPORTS -->
+  <div class="section no-print">
+    <div class="section-head"><div class="section-tag"></div><h2>Saved Reports</h2></div>
+    <div class="section-body">
+      <div class="field">
+        <select id="reportHistorySelect"><option value="">— Load a previously saved report —</option></select>
+      </div>
+      <p class="note-inline" id="historyHint">Reports you save are stored in this browser on this device — they won't appear if you open the file on a different phone or computer, or in private/incognito mode.</p>
+    </div>
+  </div>
+
+  <div style="height:6px;"></div>
+</div>
+
+<div class="action-bar no-print">
+  <button class="action-btn primary" id="btnSave" type="button">💾 Save report</button>
+  <button class="action-btn outline" id="btnPrint" type="button">🖨️ Print</button>
+  <button class="action-btn outline" id="btnPdf" type="button">📄 Download PDF</button>
+  <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
+  <button class="action-btn outline" id="btnOnedrive" type="button">☁️ Save to OneDrive</button>
+</div>
+<div class="status-msg no-print" id="statusMsg"></div>
+
+<script>
+(function(){
+
+// ---------- sandboxed-preview detection ----------
+try{
+  const inIframe = window.top !== window.self;
+  const canStorage = (()=>{ try{ localStorage.setItem('__t','1'); localStorage.removeItem('__t'); return true; }catch(e){ return false; } })();
+  if(inIframe || !canStorage){
+    document.getElementById('sandboxBanner').style.display = 'block';
+  }
+}catch(e){
+  document.getElementById('sandboxBanner').style.display = 'block';
+}
+
+// ---------- checklist definition (from the original service sheet) ----------
+const CHECKLIST = [
+  {group:"Hoist", items:[
+    "HOIST MOTOR","HOIST G'BOX","DRUM BRGS","PEDESTAL BRGS","OIL LEVELS (HOIST)",
+    "HOIST ROPE/CHAIN","ROPE GUIDE","PRESSURE BAND","HOIST BRAKE","TOP LIMIT",
+    "BOTTOM LIMIT","TOP COMPENSATOR","BLOCK SHEAVES","BLOCK BRGS","ROPE ANCHOR"
+  ]},
+  {group:"Cross Travel (X/T)", items:[
+    "X/T WHEELS","X/T BRGS","X/T SPUR","X/T PINION","X/T MOTOR","X/T G'BOX",
+    "X/T BRAKE","OIL LEVELS (X/T)","OPEN GEAR LUBE (X/T)"
+  ]},
+  {group:"Long Travel (L/T)", items:[
+    "L/T MOTOR","L/T G'BOX","L/T BRAKE","L/T WHEELS","L/T BRGS","L/T SPUR",
+    "L/T PINION","LINE SHAFT","L/T BRACINGS/BOLT","OIL LEVELS (L/T)","OPEN GEAR LUBE (L/T)"
+  ]},
+  {group:"Electrical & Ancillary", items:[
+    "PENDANT","PENDANT CABLE","FESTOON CABLE","FESTOON TRACK","FESTOON RUNNERS",
+    "CONDUCTORS","VAC SYSTEM","ELECTRONICS"
+  ]}
+];
+
+const STATUS = [
+  {key:"SERV",    label:"Serviced",        color:"var(--serv)"},
+  {key:"URGENT",  label:"Urgent Repair",   color:"var(--urgent)"},
+  {key:"ATTN",    label:"Req's Attention", color:"var(--attn)"},
+  {key:"MONITOR", label:"Monitor",         color:"var(--monitor)"},
+  {key:"NA",      label:"N/A",             color:"var(--na)"}
+];
+
+function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
+
+const ITEM_IDS = [];
+CHECKLIST.forEach(g => g.items.forEach(label => ITEM_IDS.push(slug(g.group)+'__'+slug(label))));
+
+// ---------- state ----------
+let state = {
+  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
+  date: new Date().toISOString().slice(0,10),
+  engineer:'', visitType:'Service', notes:'',
+  items:{} // id -> {status, note}
+};
+
+// ---------- render legend ----------
+const legendEl = document.getElementById('legend');
+STATUS.forEach(s=>{
+  const span = document.createElement('span');
+  span.innerHTML = `<i style="background:${s.color}"></i>${s.label}`;
+  legendEl.appendChild(span);
+});
+
+// ---------- render checklist ----------
+const checklistContainer = document.getElementById('checklistContainer');
+CHECKLIST.forEach(g=>{
+  const h = document.createElement('div');
+  h.className = 'subgroup-title';
+  h.textContent = g.group;
+  checklistContainer.appendChild(h);
+
+  g.items.forEach(label=>{
+    const id = slug(g.group)+'__'+slug(label);
+    state.items[id] = {status:null, note:'', photo:null, label, group:g.group};
+
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.id = 'row_'+id;
+    row.style.borderLeftColor = 'var(--line)';
+
+    const top = document.createElement('div');
+    top.className = 'item-top';
+    const lab = document.createElement('div');
+    lab.className = 'item-label';
+    lab.textContent = label;
+    top.appendChild(lab);
+
+    const btnWrap = document.createElement('div');
+    btnWrap.className = 'status-buttons';
+    STATUS.forEach(s=>{
+      const b = document.createElement('button');
+      b.type='button';
+      b.className='status-btn';
+      b.textContent = s.label;
+      b.dataset.status = s.key;
+      b.addEventListener('click', ()=> setStatus(id, s.key));
+      btnWrap.appendChild(b);
+    });
+    top.appendChild(btnWrap);
+    row.appendChild(top);
+
+    const noteWrap = document.createElement('div');
+    noteWrap.className = 'item-note';
+    noteWrap.id = 'note_'+id;
+    const noteInput = document.createElement('input');
+    noteInput.type='text';
+    noteInput.placeholder='Describe the finding / repair needed...';
+    noteInput.addEventListener('input', e=>{
+      state.items[id].note = e.target.value;
+      renderFindings();
+    });
+    noteWrap.appendChild(noteInput);
+
+    const photoRow = document.createElement('div');
+    photoRow.className = 'photo-row';
+    photoRow.id = 'photo_'+id;
+    renderPhotoRow(id, photoRow);
+    noteWrap.appendChild(photoRow);
+
+    row.appendChild(noteWrap);
+
+    checklistContainer.appendChild(row);
+  });
+});
+
+function setStatus(id, statusKey){
+  const item = state.items[id];
+  item.status = (item.status === statusKey) ? null : statusKey;
+  const row = document.getElementById('row_'+id);
+  const buttons = row.querySelectorAll('.status-btn');
+  const statusDef = STATUS.find(s=>s.key===statusKey);
+
+  buttons.forEach(b=>{
+    const isOn = item.status && b.dataset.status === item.status;
+    b.classList.toggle('on', isOn);
+    if(isOn){
+      b.style.background = getComputedColor(statusDef.color);
+      b.style.borderColor = 'transparent';
+    } else {
+      b.style.background = '#fff';
+      b.style.borderColor = '';
+    }
+  });
+
+  row.style.borderLeftColor = item.status ? getComputedColor(statusDef.color) : 'var(--line)';
+  row.style.background = item.status ? getComputedColor(statusDef.color)+'14' : '#fff';
+
+  const showNote = item.status === 'URGENT' || item.status === 'ATTN' || item.status === 'MONITOR';
+  document.getElementById('note_'+id).classList.toggle('show', showNote);
+
+  renderFindings();
+}
+
+function getComputedColor(varExpr){
+  // resolve a css variable like "var(--urgent)" to its computed hex value
+  const name = varExpr.match(/--[a-z-]+/)[0];
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+// ---------- photo capture ----------
+function compressImage(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const maxW = 900;
+        const scale = Math.min(1, maxW / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderPhotoRow(id, container){
+  container.innerHTML = '';
+  const photo = state.items[id].photo;
+  if(photo){
+    const thumb = document.createElement('div');
+    thumb.className = 'photo-thumb';
+    thumb.innerHTML = `<img src="${photo}" alt="Photo of finding">`;
+    const rm = document.createElement('button');
+    rm.className = 'photo-remove'; rm.type='button'; rm.textContent = '✕';
+    rm.addEventListener('click', ()=>{ state.items[id].photo = null; renderPhotoRow(id, container); renderFindings(); });
+    thumb.appendChild(rm);
+    container.appendChild(thumb);
+  } else {
+    const label = document.createElement('label');
+    label.className = 'photo-btn';
+    label.innerHTML = '📷 Add photo';
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.style.display = 'none';
+    input.addEventListener('change', async e=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      try{
+        const dataUrl = await compressImage(file);
+        state.items[id].photo = dataUrl;
+        renderPhotoRow(id, container);
+        renderFindings();
+      }catch(err){ setStatusMsg('Could not read photo: '+err.message, 'err'); }
+    });
+    label.appendChild(input);
+    container.appendChild(label);
+  }
+}
+
+// ---------- findings ----------
+function renderFindings(){
+  const list = document.getElementById('findingsList');
+  list.innerHTML = '';
+  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN');
+  if(findings.length===0){
+    list.innerHTML = '<p class="finding-empty">No urgent repairs or attention items flagged yet.</p>';
+    return;
+  }
+  findings.forEach(f=>{
+    const card = document.createElement('div');
+    card.className = 'finding-card ' + (f.status==='ATTN' ? 'attn':'');
+    card.innerHTML = `
+      ${f.photo ? `<img class="finding-photo" src="${f.photo}" alt="Photo of ${f.label}">` : ''}
+      <span class="badge ${f.status==='ATTN'?'attn':'urgent'}">${f.status==='ATTN'?"Req's Attn":'Urgent'}</span>
+      <div>
+        <div style="font-weight:700;font-size:13.5px;">${f.group} — ${f.label}</div>
+        <div style="font-size:13px;color:var(--ink-soft);">${f.note ? f.note : '<i>No note added</i>'}</div>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+renderFindings();
+
+// ---------- field bindings ----------
+const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
+  f_wll:'wll', f_falls:'falls', f_email:'email', f_date:'date', f_engineer:'engineer'};
+Object.entries(fieldMap).forEach(([elId,key])=>{
+  const el = document.getElementById(elId);
+  el.value = state[key];
+  el.addEventListener('input', ()=>{ state[key]=el.value; updateTopbarSub(); });
+});
+document.getElementById('f_date').value = state.date;
+
+document.querySelectorAll('.visit-toggle button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.visit-toggle button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    state.visitType = b.dataset.visit;
+  });
+});
+
+document.getElementById('f_notes').addEventListener('input', e=> state.notes = e.target.value);
+
+function updateTopbarSub(){
+  document.getElementById('topbarSub').textContent =
+    (state.customer || 'New report') + ' · ' + (state.date || '') + (state.engineer ? ' · '+state.engineer : '');
+}
+
+// ---------- local storage helper (works once this file is opened in a real browser tab) ----------
+function storeGet(key){
+  try{ const v = localStorage.getItem('crane_report_'+key); return v ? JSON.parse(v) : null; }
+  catch(e){ return null; }
+}
+function storeSet(key, value){
+  try{ localStorage.setItem('crane_report_'+key, JSON.stringify(value)); return true; }
+  catch(e){ throw new Error('Browser storage unavailable ('+e.message+'). Make sure you opened this file directly in a browser tab, not an in-app preview.'); }
+}
+
+// ---------- companies (persistent, this browser) ----------
+const companySelect = document.getElementById('companySelect');
+async function loadCompanies(){
+  return storeGet('companies') || [];
+}
+async function refreshCompanySelect(){
+  const companies = await loadCompanies();
+  companySelect.innerHTML = '<option value="">— Select a saved company —</option>';
+  companies.forEach((c,i)=>{
+    const o = document.createElement('option');
+    o.value = i; o.textContent = c.customer || '(unnamed company)';
+    companySelect.appendChild(o);
+  });
+  return companies;
+}
+let companiesCache = [];
+refreshCompanySelect().then(c=>companiesCache=c);
+
+companySelect.addEventListener('change', ()=>{
+  if(companySelect.value===''){return;}
+  const c = companiesCache[companySelect.value];
+  if(!c) return;
+  state.customer=c.customer||''; state.manufacturer=c.manufacturer||''; state.idno=c.idno||'';
+  state.number=c.number||''; state.wll=c.wll||''; state.falls=c.falls||''; state.email=c.email||'';
+  document.getElementById('f_customer').value=state.customer;
+  document.getElementById('f_manufacturer').value=state.manufacturer;
+  document.getElementById('f_idno').value=state.idno;
+  document.getElementById('f_number').value=state.number;
+  document.getElementById('f_wll').value=state.wll;
+  document.getElementById('f_falls').value=state.falls;
+  document.getElementById('f_email').value=state.email;
+  updateTopbarSub();
+});
+
+document.getElementById('toggleNewCompany').addEventListener('click', ()=>{
+  document.getElementById('newCompanyForm').classList.toggle('open');
+});
+
+document.getElementById('saveCompanyBtn').addEventListener('click', async ()=>{
+  const newCo = {
+    customer: document.getElementById('nc_customer').value.trim(),
+    manufacturer: document.getElementById('nc_manufacturer').value.trim(),
+    idno: document.getElementById('nc_idno').value.trim(),
+    number: document.getElementById('nc_number').value.trim(),
+    wll: document.getElementById('nc_wll').value.trim(),
+    falls: document.getElementById('nc_falls').value.trim(),
+    email: document.getElementById('nc_email').value.trim()
+  };
+  if(!newCo.customer){ setStatusMsg('Enter a customer name before saving.', 'err'); return; }
+  const companies = await loadCompanies();
+  companies.push(newCo);
+  try{
+    storeSet('companies', companies);
+    companiesCache = await refreshCompanySelect();
+    document.getElementById('newCompanyForm').classList.remove('open');
+    ['nc_customer','nc_manufacturer','nc_idno','nc_number','nc_wll','nc_falls','nc_email'].forEach(id=>document.getElementById(id).value='');
+    setStatusMsg('Company saved to your list.', 'ok');
+  }catch(e){ setStatusMsg('Could not save company: '+e.message, 'err'); }
+});
+
+// ---------- saved reports ----------
+const historySelect = document.getElementById('reportHistorySelect');
+async function loadReportIndex(){
+  return storeGet('report_index') || [];
+}
+async function refreshHistorySelect(){
+  const idx = await loadReportIndex();
+  historySelect.innerHTML = '<option value="">— Load a previously saved report —</option>';
+  idx.slice().reverse().forEach(entry=>{
+    const o = document.createElement('option');
+    o.value = entry.id;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.date} — ${entry.visitType}`;
+    historySelect.appendChild(o);
+  });
+}
+refreshHistorySelect();
+
+historySelect.addEventListener('change', async ()=>{
+  if(!historySelect.value) return;
+  try{
+    const loaded = storeGet('report_'+historySelect.value);
+    if(!loaded) return;
+    applyState(loaded);
+    setStatusMsg('Report loaded.', 'ok');
+  }catch(e){ setStatusMsg('Could not load report: '+e.message, 'err'); }
+});
+
+function applyState(loaded){
+  state = loaded;
+  Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
+  document.querySelectorAll('.visit-toggle button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.visit===state.visitType);
+  });
+  document.getElementById('f_notes').value = state.notes || '';
+  ITEM_IDS.forEach(id=>{
+    const it = state.items[id];
+    if(!it) return;
+    const row = document.getElementById('row_'+id);
+    row.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('on'));
+    const noteInput = document.getElementById('note_'+id).querySelector('input');
+    noteInput.value = it.note || '';
+    if(it.status){
+      const target = it.status;
+      state.items[id].status = null; // setStatus toggles, so clear first then apply once
+      setStatus(id, target);
+      state.items[id].note = it.note || '';
+    }
+    state.items[id].photo = it.photo || null;
+    const photoContainer = document.getElementById('photo_'+id);
+    if(photoContainer) renderPhotoRow(id, photoContainer);
+  });
+  updateTopbarSub();
+}
+
+// ---------- status message ----------
+let statusTimer;
+function setStatusMsg(msg, type){
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = 'status-msg no-print' + (type ? ' '+type : '');
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(()=>{ el.textContent=''; el.className='status-msg no-print'; }, 6000);
+}
+
+// ---------- save report ----------
+document.getElementById('btnSave').addEventListener('click', async ()=>{
+  if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return; }
+  const reportId = Date.now().toString();
+  try{
+    storeSet('report_'+reportId, state);
+    const idx = await loadReportIndex();
+    idx.push({id:reportId, customer:state.customer, date:state.date, visitType:state.visitType});
+    storeSet('report_index', idx);
+    await refreshHistorySelect();
+    setStatusMsg('Report saved.', 'ok');
+  }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); }
+});
+
+// ---------- print ----------
+document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
+
+// ---------- PDF ----------
+async function buildPdfBlob(){
+  const el = document.getElementById('app');
+  const canvas = await html2canvas(el, {scale:2, backgroundColor:'#f7f8fa', useCORS:true});
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p','pt','a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
+  let heightLeft = imgHeight;
+  let position = 0;
+  const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+  pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  while(heightLeft > 0){
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+  return pdf;
+}
+
+function reportFilename(){
+  const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
+  return `Crane_Service_Report_${cust}_${state.date}.pdf`;
+}
+
+document.getElementById('btnPdf').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnPdf');
+  btn.disabled = true; btn.textContent = 'Building PDF…';
+  try{
+    const pdf = await buildPdfBlob();
+    pdf.save(reportFilename());
+    setStatusMsg('PDF downloaded.', 'ok');
+  }catch(e){
+    setStatusMsg('Could not build PDF: '+e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '📄 Download PDF';
+  }
+});
+
+// ---------- findings summary text (used by email) ----------
+function findingsSummaryText(){
+  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN');
+  if(findings.length===0) return 'No urgent repairs or attention items were flagged during this visit.';
+  return findings.map(f=>`- [${f.status==='URGENT'?'URGENT REPAIR':"REQ'S ATTENTION"}] ${f.group} – ${f.label}${f.note?': '+f.note:''}`).join('\n');
+}
+
+// ---------- Email customer (opens the default mail app, pre-filled) ----------
+// A plain webpage cannot silently send mail on your behalf without a mail server
+// behind it — this opens your phone/computer's own mail app with everything
+// pre-filled. Download the PDF first (below) and attach it before sending.
+document.getElementById('btnEmail').addEventListener('click', ()=>{
+  if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
+  const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
+  const body = [
+    `Crane Service Report`,
+    `Customer: ${state.customer}`,
+    `Crane / ID No: ${state.idno || 'n/a'} (${state.manufacturer||'n/a'})`,
+    `Type of visit: ${state.visitType}`,
+    `Date: ${state.date}`,
+    `Engineer: ${state.engineer || 'n/a'}`,
+    ``,
+    `Findings requiring attention:`,
+    findingsSummaryText(),
+    ``,
+    `General notes:`,
+    state.notes || '(none)',
+    ``,
+    `(Please attach the PDF report before sending — download it with the Download PDF button.)`
+  ].join('\n');
+
+  const mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  let opened = true;
+  try{ window.location.href = mailto; }catch(e){ opened = false; }
+
+  // fallback: copy the text so it can be pasted into any mail/message app
+  // if the mail app hand-off gets blocked by a sandboxed preview
+  navigator.clipboard && navigator.clipboard.writeText(`To: ${state.email}\nSubject: ${subject}\n\n${body}`).catch(()=>{});
+  setStatusMsg('Opening your mail app with the report filled in (also copied to your clipboard as a backup — paste it into Mail/WhatsApp if nothing opened). Attach the downloaded PDF before sending.', 'ok');
+});
+
+// ---------- Save to OneDrive ----------
+// A downloaded HTML file can't silently log into your OneDrive and upload a
+// file — that needs a real sign-in step. On mobile there's no drag-and-drop,
+// so the real flow is: download the PDF to your phone, then upload it from
+// inside the OneDrive app itself.
+document.getElementById('btnOnedrive').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnOnedrive');
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const pdf = await buildPdfBlob();
+    pdf.save(reportFilename());
+    setStatusMsg('PDF saved to your phone\u2019s Downloads/Files app. Open the OneDrive app → tap + → Upload → pick "'+reportFilename()+'" from Downloads.', 'ok');
+  }catch(e){
+    setStatusMsg('Could not prepare the PDF: '+e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '☁️ Save to OneDrive';
+  }
+});
+
+updateTopbarSub();
+})();
+</script>
+</body>
+</html>

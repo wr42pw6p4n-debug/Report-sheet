@@ -133,8 +133,6 @@
     color:var(--steel-800); font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap;
   }
   .btn-ghost:hover{background:var(--steel-100);}
-  #newCompanyForm{display:none; margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);}
-  #newCompanyForm.open{display:block;}
 
   /* legend */
   .legend{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
@@ -271,21 +269,9 @@
           <label for="companySelect">Company on file</label>
           <select id="companySelect"><option value="">— Select a saved company —</option></select>
         </div>
-        <button class="btn-ghost" id="toggleNewCompany" type="button">+ New company</button>
+        <button class="btn-ghost" id="saveCompanyBtn" type="button">💾 Save as company</button>
       </div>
-
-      <div id="newCompanyForm">
-        <div class="grid">
-          <div class="field"><label>Customer name</label><input type="text" id="nc_customer"></div>
-          <div class="field"><label>Manufacturer</label><input type="text" id="nc_manufacturer"></div>
-          <div class="field"><label>Identification No.</label><input type="text" id="nc_idno"></div>
-          <div class="field"><label>Crane number</label><input type="text" id="nc_number"></div>
-          <div class="field"><label>Hoist WLL</label><input type="text" id="nc_wll"></div>
-          <div class="field"><label>Falls</label><input type="text" id="nc_falls"></div>
-          <div class="field full"><label>Customer email (for report delivery)</label><input type="email" id="nc_email"></div>
-        </div>
-        <button class="btn-ghost" id="saveCompanyBtn" type="button">Save company to list</button>
-      </div>
+      <p class="note-inline" style="margin-top:-2px;">Fill in the details below, then tap "Save as company" to remember this customer — selecting them here next time auto-fills everything.</p>
 
       <div class="grid" style="margin-top:14px;">
         <div class="field"><label>Customer</label><input type="text" id="f_customer"></div>
@@ -350,6 +336,7 @@
 
 <div class="action-bar no-print">
   <button class="action-btn primary" id="btnSave" type="button">💾 Save report</button>
+  <button class="action-btn yellow" id="btnComplete" type="button">✅ Complete &amp; start new</button>
   <button class="action-btn outline" id="btnPrint" type="button">🖨️ Print</button>
   <button class="action-btn outline" id="btnPdf" type="button">📄 Download PDF</button>
   <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
@@ -622,9 +609,17 @@ document.querySelectorAll('.visit-toggle button').forEach(b=>{
 
 document.getElementById('f_notes').addEventListener('input', e=> state.notes = e.target.value);
 
+function formatDateUK(iso){
+  if(!iso) return '';
+  const [y,m,d] = iso.split('-').map(Number);
+  if(!y||!m||!d) return iso;
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${d} ${months[m-1]} ${y}`;
+}
+
 function updateTopbarSub(){
   document.getElementById('topbarSub').textContent =
-    (state.customer || 'New report') + ' · ' + (state.date || '') + (state.engineer ? ' · '+state.engineer : '');
+    (state.customer || 'New report') + ' · ' + formatDateUK(state.date) + (state.engineer ? ' · '+state.engineer : '');
 }
 
 // ---------- local storage helper (works once this file is opened in a real browser tab) ----------
@@ -671,29 +666,21 @@ companySelect.addEventListener('change', ()=>{
   updateTopbarSub();
 });
 
-document.getElementById('toggleNewCompany').addEventListener('click', ()=>{
-  document.getElementById('newCompanyForm').classList.toggle('open');
-});
-
 document.getElementById('saveCompanyBtn').addEventListener('click', async ()=>{
+  if(!state.customer){ setStatusMsg('Enter a customer name before saving.', 'err'); return; }
   const newCo = {
-    customer: document.getElementById('nc_customer').value.trim(),
-    manufacturer: document.getElementById('nc_manufacturer').value.trim(),
-    idno: document.getElementById('nc_idno').value.trim(),
-    number: document.getElementById('nc_number').value.trim(),
-    wll: document.getElementById('nc_wll').value.trim(),
-    falls: document.getElementById('nc_falls').value.trim(),
-    email: document.getElementById('nc_email').value.trim()
+    customer: state.customer, manufacturer: state.manufacturer, idno: state.idno,
+    number: state.number, wll: state.wll, falls: state.falls, email: state.email
   };
-  if(!newCo.customer){ setStatusMsg('Enter a customer name before saving.', 'err'); return; }
   const companies = await loadCompanies();
-  companies.push(newCo);
+  const existingIndex = companies.findIndex(c => (c.customer||'').trim().toLowerCase() === newCo.customer.trim().toLowerCase());
+  if(existingIndex > -1){ companies[existingIndex] = newCo; } else { companies.push(newCo); }
   try{
     storeSet('companies', companies);
     companiesCache = await refreshCompanySelect();
-    document.getElementById('newCompanyForm').classList.remove('open');
-    ['nc_customer','nc_manufacturer','nc_idno','nc_number','nc_wll','nc_falls','nc_email'].forEach(id=>document.getElementById(id).value='');
-    setStatusMsg('Company saved to your list.', 'ok');
+    const idx = companies.findIndex(c => c.customer === newCo.customer);
+    if(idx > -1) companySelect.value = idx;
+    setStatusMsg(existingIndex > -1 ? 'Saved company details updated.' : 'Company saved to your list.', 'ok');
   }catch(e){ setStatusMsg('Could not save company: '+e.message, 'err'); }
 });
 
@@ -708,7 +695,7 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.date} — ${entry.visitType}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${formatDateUK(entry.date)} — ${entry.visitType}`;
     historySelect.appendChild(o);
   });
 }
@@ -735,7 +722,10 @@ function applyState(loaded){
     const it = state.items[id];
     if(!it) return;
     const row = document.getElementById('row_'+id);
-    row.querySelectorAll('.status-btn').forEach(b=>b.classList.remove('on'));
+    row.querySelectorAll('.status-btn').forEach(b=>{ b.classList.remove('on'); b.style.background='#fff'; b.style.borderColor=''; });
+    row.style.borderLeftColor = 'var(--line)';
+    row.style.background = '#fff';
+    document.getElementById('note_'+id).classList.remove('show');
     const noteInput = document.getElementById('note_'+id).querySelector('input');
     noteInput.value = it.note || '';
     if(it.status){
@@ -762,8 +752,8 @@ function setStatusMsg(msg, type){
 }
 
 // ---------- save report ----------
-document.getElementById('btnSave').addEventListener('click', async ()=>{
-  if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return; }
+async function saveReport(){
+  if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
   const reportId = Date.now().toString();
   try{
     storeSet('report_'+reportId, state);
@@ -771,8 +761,40 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
     idx.push({id:reportId, customer:state.customer, date:state.date, visitType:state.visitType});
     storeSet('report_index', idx);
     await refreshHistorySelect();
-    setStatusMsg('Report saved.', 'ok');
-  }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); }
+    return true;
+  }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); return false; }
+}
+
+document.getElementById('btnSave').addEventListener('click', async ()=>{
+  const ok = await saveReport();
+  if(ok) setStatusMsg('Report saved.', 'ok');
+});
+
+// ---------- complete & start new ----------
+function freshState(keepEngineer){
+  const items = {};
+  ITEM_IDS.forEach(id=>{
+    items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
+  });
+  return {
+    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
+    date: new Date().toISOString().slice(0,10),
+    engineer: keepEngineer ? state.engineer : '',
+    visitType:'Service', notes:'', items
+  };
+}
+
+document.getElementById('btnComplete').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnComplete');
+  if(!state.customer){ setStatusMsg('Add a customer name before completing the report.', 'err'); return; }
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const ok = await saveReport();
+  btn.disabled = false; btn.textContent = '✅ Complete & start new';
+  if(!ok) return;
+  applyState(freshState(true)); // keeps your name filled in for the next job
+  companySelect.value = '';
+  setStatusMsg('Report saved. Clean sheet ready for the next crane.', 'ok');
+  window.scrollTo({top:0, behavior:'smooth'});
 });
 
 // ---------- print ----------
@@ -822,7 +844,7 @@ async function buildPdfBlob(){
     ['Crane number', state.number||'—']
   ];
   const infoRight = [
-    ['Date', state.date||'—'],
+    ['Date', formatDateUK(state.date)||'—'],
     ['Engineer', state.engineer||'—'],
     ['Type of visit', state.visitType||'—'],
     ['Hoist WLL / Falls', (state.wll||'—')+' / '+(state.falls||'—')]
@@ -971,7 +993,7 @@ function reportPlainText(full){
     `Customer: ${state.customer||'—'}`,
     `Crane / ID No: ${state.idno || 'n/a'} (${state.manufacturer||'n/a'})`,
     `Type of visit: ${state.visitType}`,
-    `Date: ${state.date}`,
+    `Date: ${formatDateUK(state.date)}`,
     `Engineer: ${state.engineer || 'n/a'}`,
     ``,
     `Findings requiring attention:`,

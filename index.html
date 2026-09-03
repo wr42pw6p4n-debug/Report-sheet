@@ -179,6 +179,11 @@
     cursor:pointer; padding:0;
   }
   .finding-photo{width:56px; height:56px; border-radius:7px; object-fit:cover; flex-shrink:0; border:1px solid var(--line);}
+  .loler-preview{
+    font-size:13px; line-height:1.5; color:var(--ink); background:var(--steel-50);
+    border:1px solid var(--line); border-radius:7px; padding:8px 10px; margin-bottom:6px; white-space:pre-line;
+  }
+  .loler-preview:empty::before{content:"Nothing flagged yet."; color:var(--ink-soft); font-style:italic;}
 
   /* findings summary */
   .finding-card{
@@ -186,12 +191,14 @@
     border-left:5px solid var(--urgent); background:#fdf1f1;
   }
   .finding-card.attn{border-left-color:var(--attn); background:#fdfbe9;}
+  .finding-card.monitor{border-left-color:var(--monitor); background:#fdf6ea;}
   .finding-card .badge{
     font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
     padding:2px 7px; border-radius:20px; color:#fff; align-self:flex-start; white-space:nowrap;
   }
   .finding-card .badge.urgent{background:var(--urgent);}
-  .finding-card .badge.attn{background:var(--monitor);}
+  .finding-card .badge.attn{background:#b89400;}
+  .finding-card .badge.monitor{background:var(--monitor);}
   .finding-empty{color:var(--ink-soft); font-size:13.5px; padding:6px 2px;}
 
   /* action bar */
@@ -288,9 +295,34 @@
           <div class="visit-toggle">
             <button type="button" data-visit="Service" class="active">Service</button>
             <button type="button" data-visit="Inspection">Inspection</button>
+            <button type="button" data-visit="LOLER">LOLER</button>
           </div>
         </div>
       </div>
+
+      <div id="lolerFields" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">LOLER 1998 thorough examination details — Sections A, B and C below fill in automatically from your findings above.</p>
+        <div class="grid">
+          <div class="field full"><label>Location of Equipment</label><input type="text" id="loler_location"></div>
+          <div class="field"><label>Make &amp; Serial No.</label><input type="text" id="loler_makeserial"></div>
+          <div class="field"><label>SWL</label><input type="text" id="loler_swl"></div>
+          <div class="field full"><label>Description of Lifting Equipment</label><input type="text" id="loler_description"></div>
+          <div class="field"><label>Date of Previous Examination</label><input type="date" id="loler_prevexam"></div>
+          <div class="field"><label>Date of Next Examination</label><input type="date" id="loler_nextexam"></div>
+          <div class="field"><label>Our Ref</label><input type="text" id="loler_ourref" placeholder="KE-"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOLER SECTIONS -->
+  <div class="section" id="lolerSectionsCard" style="display:none;">
+    <div class="section-head"><div class="section-tag"></div><h2>LOLER Report Sections</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Urgent Repairs feed Section A, Req's Attention feeds Section B, Monitor feeds Section C. Add anything extra below — it's included alongside the auto-filled list.</p>
+      <div class="field full"><label>A — Defects which could cause a danger to persons</label><div id="lolerPreviewA" class="loler-preview"></div><textarea id="loler_extraA" placeholder="Additional Section A notes (optional)"></textarea></div>
+      <div class="field full"><label>B — Other parts requiring rectification</label><div id="lolerPreviewB" class="loler-preview"></div><textarea id="loler_extraB" placeholder="Additional Section B notes (optional)"></textarea></div>
+      <div class="field full"><label>C — Observations and recommendations</label><div id="lolerPreviewC" class="loler-preview"></div><textarea id="loler_extraC" placeholder="Additional Section C notes (optional)"></textarea></div>
     </div>
   </div>
 
@@ -339,6 +371,7 @@
   <button class="action-btn yellow" id="btnComplete" type="button">✅ Complete &amp; start new</button>
   <button class="action-btn outline" id="btnPrint" type="button">🖨️ Print</button>
   <button class="action-btn outline" id="btnPdf" type="button">📄 Download PDF</button>
+  <button class="action-btn outline" id="btnLoler" type="button" style="display:none; border-color:var(--serv); color:var(--serv);">📋 Download LOLER Report</button>
   <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
   <button class="action-btn outline" id="btnCopyText" type="button">📋 Copy report text</button>
   <button class="action-btn outline" id="btnOnedrive" type="button">☁️ Save to OneDrive</button>
@@ -398,6 +431,7 @@ let state = {
   customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
+  loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''},
   items:{} // id -> {status, note}
 };
 
@@ -569,23 +603,27 @@ function renderPhotoRow(id, container){
 function renderFindings(){
   const list = document.getElementById('findingsList');
   list.innerHTML = '';
-  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN');
+  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN' || i.status==='MONITOR');
   if(findings.length===0){
-    list.innerHTML = '<p class="finding-empty">No urgent repairs or attention items flagged yet.</p>';
+    list.innerHTML = '<p class="finding-empty">No urgent repairs, attention items, or monitor flags yet.</p>';
+    renderLolerSections();
     return;
   }
   findings.forEach(f=>{
     const card = document.createElement('div');
-    card.className = 'finding-card ' + (f.status==='ATTN' ? 'attn':'');
+    const cls = f.status==='URGENT' ? '' : f.status==='ATTN' ? 'attn' : 'monitor';
+    const badgeLabel = f.status==='URGENT' ? 'Urgent' : f.status==='ATTN' ? "Req's Attn" : 'Monitor';
+    card.className = 'finding-card ' + cls;
     card.innerHTML = `
       ${f.photo ? `<img class="finding-photo" src="${f.photo}" alt="Photo of ${f.label}">` : ''}
-      <span class="badge ${f.status==='ATTN'?'attn':'urgent'}">${f.status==='ATTN'?"Req's Attn":'Urgent'}</span>
+      <span class="badge ${cls||'urgent'}">${badgeLabel}</span>
       <div>
         <div style="font-weight:700;font-size:13.5px;">${f.group} — ${f.label}</div>
         <div style="font-size:13px;color:var(--ink-soft);">${f.note ? f.note : '<i>No note added</i>'}</div>
       </div>`;
     list.appendChild(card);
   });
+  renderLolerSections();
 }
 renderFindings();
 
@@ -599,13 +637,61 @@ Object.entries(fieldMap).forEach(([elId,key])=>{
 });
 document.getElementById('f_date').value = state.date;
 
-document.querySelectorAll('.visit-toggle button').forEach(b=>{
-  b.addEventListener('click', ()=>{
-    document.querySelectorAll('.visit-toggle button').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    state.visitType = b.dataset.visit;
+const lolerFieldMap = {loler_location:'location', loler_makeserial:'makeserial', loler_swl:'swl',
+  loler_description:'description', loler_prevexam:'prevexam', loler_nextexam:'nextexam', loler_ourref:'ourref',
+  loler_extraA:'extraA', loler_extraB:'extraB', loler_extraC:'extraC'};
+Object.entries(lolerFieldMap).forEach(([elId,key])=>{
+  const el = document.getElementById(elId);
+  el.addEventListener('input', ()=>{
+    state.loler[key] = el.value;
+    if(key==='extraA'||key==='extraB'||key==='extraC') renderLolerSections();
   });
 });
+
+function setVisitType(type){
+  state.visitType = type;
+  document.querySelectorAll('.visit-toggle button').forEach(x=>x.classList.toggle('active', x.dataset.visit===type));
+  const isLoler = type === 'LOLER';
+  document.getElementById('lolerFields').style.display = isLoler ? 'block' : 'none';
+  document.getElementById('lolerSectionsCard').style.display = isLoler ? 'block' : 'none';
+  document.getElementById('btnLoler').style.display = isLoler ? '' : 'none';
+  if(isLoler){
+    if(!state.loler.swl && state.wll) state.loler.swl = state.wll;
+    document.getElementById('loler_swl').value = state.loler.swl;
+    if(!state.loler.ourref){ state.loler.ourref = 'KE-'+state.date.replace(/-/g,''); document.getElementById('loler_ourref').value = state.loler.ourref; }
+    if(!state.loler.nextexam){
+      const d = new Date(state.date); d.setFullYear(d.getFullYear()+1);
+      state.loler.nextexam = d.toISOString().slice(0,10);
+      document.getElementById('loler_nextexam').value = state.loler.nextexam;
+    }
+    renderLolerSections();
+  }
+}
+
+document.querySelectorAll('.visit-toggle button').forEach(b=>{
+  b.addEventListener('click', ()=> setVisitType(b.dataset.visit));
+});
+
+function lolerSectionText(statusKey){
+  const items = Object.values(state.items).filter(i=>i.status===statusKey);
+  if(items.length===0) return '';
+  return items.map(f=>`• ${f.group} – ${f.label}${f.note?': '+f.note:' (no note added)'}`).join('\n');
+}
+
+function renderLolerSections(){
+  const a = lolerSectionText('URGENT');
+  const b = lolerSectionText('ATTN');
+  const c = lolerSectionText('MONITOR');
+  document.getElementById('lolerPreviewA').textContent = a;
+  document.getElementById('lolerPreviewB').textContent = b;
+  document.getElementById('lolerPreviewC').textContent = c;
+}
+
+function lolerFullSectionText(statusKey, extraKey){
+  const auto = lolerSectionText(statusKey);
+  const extra = (state.loler[extraKey]||'').trim();
+  return [auto, extra].filter(Boolean).join('\n');
+}
 
 document.getElementById('f_notes').addEventListener('input', e=> state.notes = e.target.value);
 
@@ -713,10 +799,10 @@ historySelect.addEventListener('change', async ()=>{
 
 function applyState(loaded){
   state = loaded;
+  if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''};
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
-  document.querySelectorAll('.visit-toggle button').forEach(b=>{
-    b.classList.toggle('active', b.dataset.visit===state.visitType);
-  });
+  Object.entries(lolerFieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state.loler[key]||'');
+  setVisitType(state.visitType || 'Service');
   document.getElementById('f_notes').value = state.notes || '';
   ITEM_IDS.forEach(id=>{
     const it = state.items[id];
@@ -780,7 +866,9 @@ function freshState(keepEngineer){
     customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
-    visitType:'Service', notes:'', items
+    visitType:'Service', notes:'',
+    loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''},
+    items
   };
 }
 
@@ -866,11 +954,11 @@ async function buildPdfBlob(){
   // findings
   doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,20,20);
   doc.text('Highlighted Findings', margin, y); y += 13;
-  const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN');
+  const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR');
   doc.setFontSize(8.5);
   if(findings.length===0){
     doc.setFont('helvetica','italic'); doc.setTextColor(100,105,112);
-    doc.text('No urgent repairs or attention items were flagged during this visit.', margin, y);
+    doc.text('No urgent repairs, attention items, or monitor flags were noted during this visit.', margin, y);
     y += 14;
   } else {
     findings.forEach(f=>{
@@ -969,11 +1057,165 @@ document.getElementById('btnPdf').addEventListener('click', async ()=>{
   }
 });
 
+// ---------- LOLER 1998 thorough examination report ----------
+// Mirrors Key Engineering's official A/B/C thorough examination template.
+function lolerFilename(){
+  const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
+  return `LOLER_Thorough_Examination_${cust}_${state.date}.pdf`;
+}
+
+async function buildLolerPdfBlob(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','pt','a4');
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  const tableW = pageW - margin*2;
+  const footerY = pageH - 44;
+  let y = margin;
+
+  function checkPageBreak(neededHeight){
+    if(y + neededHeight > footerY - 10){ doc.addPage(); y = margin; }
+  }
+
+  // letterhead
+  doc.setFont('helvetica','bold'); doc.setFontSize(14); doc.setTextColor(20,20,20);
+  doc.text('Key Engineering (Chesterfield) Ltd', margin, y); y += 22;
+  doc.setDrawColor(245,184,0); doc.setLineWidth(2); doc.line(margin, y-6, pageW-margin, y-6); doc.setLineWidth(1);
+  doc.setFont('helvetica','bold'); doc.setFontSize(11.5); doc.setTextColor(30,30,30);
+  const titleLines = doc.splitTextToSize('REPORT OF THOROUGH EXAMINATION OF LIFTING EQUIPMENT TO COMPLY WITH LOLER 1998 REGULATIONS', tableW);
+  titleLines.forEach(line=>{ doc.text(line, pageW/2, y, {align:'center'}); y += 14; });
+  y += 8;
+
+  // ---- table drawing helpers ----
+  function rowBox(height){
+    doc.setDrawColor(180,186,193);
+    doc.rect(margin, y, tableW, height);
+    return y;
+  }
+  function labelValue(label, value, x, w, topY, opts){
+    opts = opts || {};
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.setTextColor(40,40,40);
+    doc.text(label, x+6, topY+12);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(20,20,20);
+    const lines = doc.splitTextToSize(value || '—', w-12);
+    lines.forEach((line,i)=> doc.text(line, x+6, topY+12+13+(i*11)));
+    return lines.length;
+  }
+
+  // Row 1: Customer | Dates | Our Ref
+  checkPageBreak(58);
+  { const topY = y, h = 58;
+    rowBox(h);
+    doc.line(margin+220, topY, margin+220, topY+h);
+    doc.line(margin+420, topY, margin+420, topY+h);
+    labelValue('Customer:', state.customer, margin, 220, topY);
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.3); doc.setTextColor(40,40,40);
+    doc.text('Date of Previous Examination:', margin+226, topY+12);
+    doc.text('Date of Examination:', margin+226, topY+27);
+    doc.text('Date of Next Examination:', margin+226, topY+42);
+    doc.setFont('helvetica','normal'); doc.setTextColor(20,20,20);
+    doc.text(formatDateUK(state.loler.prevexam)||'—', margin+226+128, topY+12);
+    doc.text(formatDateUK(state.date)||'—', margin+226+128, topY+27);
+    doc.text(formatDateUK(state.loler.nextexam)||'—', margin+226+128, topY+42);
+    labelValue('Our Ref:', state.loler.ourref, margin+426, tableW-426, topY);
+    y += h;
+  }
+
+  // Row 2: Location of Equipment
+  checkPageBreak(34);
+  { const topY = y, h = 34;
+    rowBox(h);
+    labelValue('Location of Equipment:', state.loler.location, margin, tableW, topY);
+    y += h;
+  }
+
+  // Row 3: Make & Serial No | SWL
+  checkPageBreak(40);
+  { const topY = y, h = 40;
+    rowBox(h);
+    doc.line(margin+360, topY, margin+360, topY+h);
+    labelValue('Make and Serial No:', state.loler.makeserial, margin, 360, topY);
+    labelValue('SWL:', state.loler.swl, margin+360, tableW-360, topY);
+    y += h;
+  }
+
+  // Row 4: Description of Lifting Equipment
+  checkPageBreak(40);
+  { const topY = y, h = 40;
+    rowBox(h);
+    labelValue('Description of Lifting Equipment:', state.loler.description, margin, tableW, topY);
+    y += h;
+  }
+
+  // Sections A / B / C
+  function sectionRow(letter, title, text){
+    doc.setFont('helvetica','normal'); doc.setFontSize(8.3);
+    const headerText = `${letter}: ${title}`;
+    const headerLines = doc.splitTextToSize(headerText, tableW-12);
+    const bodyLines = doc.splitTextToSize(text || 'None.', tableW-12);
+    const h = Math.max(40, 14 + headerLines.length*10 + bodyLines.length*10.5 + 8);
+    checkPageBreak(h);
+    const topY = y;
+    rowBox(h);
+    doc.setFont('helvetica','bold'); doc.setTextColor(40,40,40);
+    headerLines.forEach((line,i)=> doc.text(line, margin+6, topY+12+(i*10)));
+    let by = topY+12+headerLines.length*10+10;
+    doc.setFont('helvetica','normal'); doc.setTextColor(20,20,20);
+    bodyLines.forEach(line=>{ doc.text(line, margin+6, by); by += 10.5; });
+    y += h;
+  }
+  sectionRow('A', 'Defects which could cause a danger to persons. Particulars of any repairs, renewals or alterations to rectify those defects and the time within which those defects shall be rectified.', lolerFullSectionText('URGENT','extraA'));
+  sectionRow('B', 'Identification of any other parts that required rectification.', lolerFullSectionText('ATTN','extraB'));
+  sectionRow('C', 'Observations and recommendations (issues relating to health and safety). Any actions stipulated should be suitably and satisfactorily completed.', lolerFullSectionText('MONITOR','extraC'));
+
+  // Certification row
+  checkPageBreak(56);
+  { const topY = y, h = 56;
+    rowBox(h);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8);
+    doc.splitTextToSize('I certify that on the dates indicated above I thoroughly examined this equipment and the above is a correct report on the condition.', tableW-12)
+      .forEach((line,i)=> doc.text(line, margin+6, topY+12+(i*10)));
+    doc.setFont('helvetica','bold'); doc.setFontSize(8.5); doc.setTextColor(30,30,30);
+    doc.text(`Date: ${formatDateUK(state.date)}`, margin+6, topY+h-10);
+    doc.text(`Signed: _______________`, margin+186, topY+h-10);
+    doc.text(`Inspecting Engineer: ${state.engineer||'—'}`, margin+360, topY+h-10);
+    y += h;
+  }
+
+  // footer on every page
+  const pageCount = doc.internal.getNumberOfPages();
+  for(let p=1; p<=pageCount; p++){
+    doc.setPage(p);
+    doc.setDrawColor(220,220,220); doc.line(margin, footerY-8, pageW-margin, footerY-8);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.3); doc.setTextColor(110,110,110);
+    doc.text('Key Engineering (Chesterfield) Ltd, The Bungalow, Whittington Lane, Unstone, Derbyshire, S18 4DQ', pageW/2, footerY, {align:'center'});
+    doc.text('Tel: 07971 222574, 01246 413524, VAT Reg No: 875 1100 42, Company Reg No: 06984165.', pageW/2, footerY+10, {align:'center'});
+  }
+
+  return doc;
+}
+
+document.getElementById('btnLoler').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnLoler');
+  btn.disabled = true; btn.textContent = 'Building LOLER report…';
+  try{
+    const pdf = await buildLolerPdfBlob();
+    pdf.save(lolerFilename());
+    setStatusMsg('LOLER report downloaded.', 'ok');
+  }catch(e){
+    setStatusMsg('Could not build LOLER report: '+e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '📋 Download LOLER Report';
+  }
+});
+
 // ---------- findings summary text (used by email) ----------
 function findingsSummaryText(){
-  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN');
-  if(findings.length===0) return 'No urgent repairs or attention items were flagged during this visit.';
-  return findings.map(f=>`- [${f.status==='URGENT'?'URGENT REPAIR':"REQ'S ATTENTION"}] ${f.group} – ${f.label}${f.note?': '+f.note:''}`).join('\n');
+  const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN' || i.status==='MONITOR');
+  if(findings.length===0) return 'No urgent repairs, attention items, or monitor flags were noted during this visit.';
+  const labelFor = k => k==='URGENT' ? 'URGENT REPAIR' : k==='ATTN' ? "REQ'S ATTENTION" : 'MONITOR';
+  return findings.map(f=>`- [${labelFor(f.status)}] ${f.group} – ${f.label}${f.note?': '+f.note:''}`).join('\n');
 }
 
 // ---------- Email customer (opens the default mail app, pre-filled) ----------
@@ -985,7 +1227,7 @@ function findingsSummaryText(){
 function reportPlainText(full){
   const findingsText = full ? findingsSummaryText()
     : (()=>{
-        const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN');
+        const findings = Object.values(state.items).filter(i=>i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR');
         return findings.length===0 ? 'None flagged.' : `${findings.length} item(s) flagged — see attached PDF for details.`;
       })();
   return [

@@ -184,6 +184,10 @@
     border:1px solid var(--line); border-radius:7px; padding:8px 10px; margin-bottom:6px; white-space:pre-line;
   }
   .loler-preview:empty::before{content:"Nothing flagged yet."; color:var(--ink-soft); font-style:italic;}
+  .sig-wrap{
+    background:#fff; border:1.5px dashed var(--steel-700); border-radius:8px; overflow:hidden;
+  }
+  #sigCanvas{ width:100%; height:150px; display:block; touch-action:none; cursor:crosshair; }
 
   /* findings summary */
   .finding-card{
@@ -323,6 +327,17 @@
       <div class="field full"><label>A — Defects which could cause a danger to persons</label><div id="lolerPreviewA" class="loler-preview"></div><textarea id="loler_extraA" placeholder="Additional Section A notes (optional)"></textarea></div>
       <div class="field full"><label>B — Other parts requiring rectification</label><div id="lolerPreviewB" class="loler-preview"></div><textarea id="loler_extraB" placeholder="Additional Section B notes (optional)"></textarea></div>
       <div class="field full"><label>C — Observations and recommendations</label><div id="lolerPreviewC" class="loler-preview"></div><textarea id="loler_extraC" placeholder="Additional Section C notes (optional)"></textarea></div>
+
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+        <div class="field full"><label>Inspecting Engineer (sign-off name)</label><input type="text" id="loler_signname" placeholder="Name as it should appear on the certificate"></div>
+        <div class="field full">
+          <label>Signature</label>
+          <div class="sig-wrap">
+            <canvas id="sigCanvas"></canvas>
+          </div>
+          <button type="button" class="btn-ghost" id="sigClear" style="margin-top:8px;">✕ Clear signature</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -437,7 +452,7 @@ let state = {
   customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
-  loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''},
+  loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null},
   items:{} // id -> {status, note}
 };
 
@@ -645,7 +660,7 @@ document.getElementById('f_date').value = state.date;
 
 const lolerFieldMap = {loler_location:'location', loler_makeserial:'makeserial', loler_swl:'swl',
   loler_description:'description', loler_prevexam:'prevexam', loler_nextexam:'nextexam', loler_ourref:'ourref',
-  loler_extraA:'extraA', loler_extraB:'extraB', loler_extraC:'extraC'};
+  loler_extraA:'extraA', loler_extraB:'extraB', loler_extraC:'extraC', loler_signname:'signname'};
 Object.entries(lolerFieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
   el.addEventListener('input', ()=>{
@@ -670,7 +685,9 @@ function setVisitType(type){
       state.loler.nextexam = d.toISOString().slice(0,10);
       document.getElementById('loler_nextexam').value = state.loler.nextexam;
     }
+    if(!state.loler.signname && state.engineer){ state.loler.signname = state.engineer; document.getElementById('loler_signname').value = state.loler.signname; }
     renderLolerSections();
+    restoreSignaturePad();
   }
 }
 
@@ -698,6 +715,72 @@ function lolerFullSectionText(statusKey, extraKey){
   const extra = (state.loler[extraKey]||'').trim();
   return [auto, extra].filter(Boolean).join('\n');
 }
+
+// ---------- signature pad ----------
+const sigCanvas = document.getElementById('sigCanvas');
+const sigCtx = sigCanvas.getContext('2d');
+let sigDrawing = false, sigLastX = 0, sigLastY = 0, sigHasStroke = false;
+
+function sigPos(e){
+  const rect = sigCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function sigStart(e){
+  sigDrawing = true; sigHasStroke = true;
+  const p = sigPos(e); sigLastX = p.x; sigLastY = p.y;
+  e.preventDefault();
+}
+function sigMove(e){
+  if(!sigDrawing) return;
+  const p = sigPos(e);
+  sigCtx.beginPath(); sigCtx.moveTo(sigLastX, sigLastY); sigCtx.lineTo(p.x, p.y); sigCtx.stroke();
+  sigLastX = p.x; sigLastY = p.y;
+  e.preventDefault();
+}
+function sigEnd(){
+  if(!sigDrawing) return;
+  sigDrawing = false;
+  state.loler.signature = sigCanvas.toDataURL('image/png');
+}
+sigCanvas.addEventListener('pointerdown', sigStart);
+sigCanvas.addEventListener('pointermove', sigMove);
+window.addEventListener('pointerup', sigEnd);
+window.addEventListener('pointercancel', sigEnd);
+
+function sigSetupContext(){
+  sigCtx.lineWidth = 2.2;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.strokeStyle = '#161b22';
+}
+
+// (re)draws the canvas at its current on-screen size and restores any saved signature.
+// Must run after the LOLER panel is visible — a hidden canvas reports zero size.
+function restoreSignaturePad(){
+  const rect = sigCanvas.getBoundingClientRect();
+  if(rect.width < 10) return; // still hidden, nothing to size against yet
+  const ratio = window.devicePixelRatio || 1;
+  sigCanvas.width = rect.width * ratio;
+  sigCanvas.height = rect.height * ratio;
+  sigCtx.setTransform(1,0,0,1,0,0);
+  sigCtx.scale(ratio, ratio);
+  sigSetupContext();
+  sigHasStroke = false;
+  if(state.loler.signature){
+    const img = new Image();
+    img.onload = ()=> sigCtx.drawImage(img, 0, 0, rect.width, rect.height);
+    img.src = state.loler.signature;
+    sigHasStroke = true;
+  }
+}
+window.addEventListener('resize', ()=>{ if(state.visitType==='LOLER') restoreSignaturePad(); });
+
+document.getElementById('sigClear').addEventListener('click', ()=>{
+  const rect = sigCanvas.getBoundingClientRect();
+  sigCtx.clearRect(0, 0, rect.width, rect.height);
+  state.loler.signature = null;
+  sigHasStroke = false;
+});
 
 document.getElementById('f_notes').addEventListener('input', e=> state.notes = e.target.value);
 
@@ -805,7 +888,7 @@ historySelect.addEventListener('change', async ()=>{
 
 function applyState(loaded){
   state = loaded;
-  if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''};
+  if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null};
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
   Object.entries(lolerFieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state.loler[key]||'');
   setVisitType(state.visitType || 'Service');
@@ -873,7 +956,7 @@ function freshState(keepEngineer){
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
     visitType:'Service', notes:'',
-    loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:''},
+    loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null},
     items
   };
 }
@@ -1194,21 +1277,28 @@ async function buildLolerPdfBlob(){
   sectionRow('C', 'Observations and recommendations (issues relating to health and safety). Any actions stipulated should be suitably and satisfactorily completed.', lolerFullSectionText('MONITOR','extraC'), [253,240,224], [224,138,28]);
 
   // Certification row
-  checkPageBreak(58);
-  { const topY = y, h = 58;
+  const signName = state.loler.signname || state.engineer || '—';
+  checkPageBreak(64);
+  { const topY = y, h = 64;
     rowBox(h, [247,250,252]);
     doc.setFont('helvetica','italic'); doc.setFontSize(8); doc.setTextColor(80,85,92);
     doc.splitTextToSize('I certify that on the dates indicated above I thoroughly examined this equipment and the above is a correct report on the condition.', tableW-14)
       .forEach((line,i)=> doc.text(line, margin+7, topY+13+(i*10)));
-    doc.setDrawColor(180,186,193); doc.line(margin+7, topY+h-22, margin+150, topY+h-22);
+
+    // signature image, if captured on the device — otherwise a blank line for a pen signature
+    if(state.loler.signature){
+      try{ doc.addImage(state.loler.signature, 'PNG', margin+7, topY+h-46, 130, 30); }catch(e){}
+    }
+    doc.setDrawColor(180,186,193);
+    doc.line(margin+7, topY+h-22, margin+150, topY+h-22);
     doc.line(margin+185, topY+h-22, margin+330, topY+h-22);
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]);
-    doc.text('DATE', margin+7, topY+h-10);
-    doc.text('SIGNED', margin+185, topY+h-10);
+    doc.text('SIGNED', margin+7, topY+h-10);
+    doc.text('DATE', margin+185, topY+h-10);
     doc.text('INSPECTING ENGINEER', margin+345, topY+h-10);
     doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(INK[0],INK[1],INK[2]);
-    doc.text(formatDateUK(state.date)||'—', margin+7, topY+h-26);
-    doc.text(state.engineer||'—', margin+345, topY+h-22);
+    doc.text(formatDateUK(state.date)||'—', margin+185, topY+h-26);
+    doc.text(signName, margin+345, topY+h-22);
     y += h;
   }
 
@@ -1232,7 +1322,7 @@ document.getElementById('btnLoler').addEventListener('click', async ()=>{
   try{
     const pdf = await buildLolerPdfBlob();
     pdf.save(lolerFilename());
-    setStatusMsg('LOLER report downloaded.', 'ok');
+    setStatusMsg(state.loler.signature ? 'LOLER report downloaded.' : 'LOLER report downloaded — note it has no signature yet, sign in the box above before sending it out.', 'ok');
   }catch(e){
     setStatusMsg('Could not build LOLER report: '+e.message, 'err');
   }finally{

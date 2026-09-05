@@ -854,15 +854,18 @@ companySelect.addEventListener('change', ()=>{
   if(companySelect.value===''){return;}
   const c = companiesCache[companySelect.value];
   if(!c) return;
-  state.customer=c.customer||''; state.manufacturer=c.manufacturer||''; state.idno=c.idno||'';
-  state.number=c.number||''; state.wll=c.wll||''; state.falls=c.falls||''; state.email=c.email||'';
+  // only the customer's own details carry over — everything crane-specific
+  // starts blank since the same customer can have several different cranes
+  state.customer=c.customer||''; state.email=c.email||'';
+  state.manufacturer=''; state.idno=''; state.number=''; state.wll=''; state.falls=''; state.engineer='';
   document.getElementById('f_customer').value=state.customer;
-  document.getElementById('f_manufacturer').value=state.manufacturer;
-  document.getElementById('f_idno').value=state.idno;
-  document.getElementById('f_number').value=state.number;
-  document.getElementById('f_wll').value=state.wll;
-  document.getElementById('f_falls').value=state.falls;
   document.getElementById('f_email').value=state.email;
+  document.getElementById('f_manufacturer').value='';
+  document.getElementById('f_idno').value='';
+  document.getElementById('f_number').value='';
+  document.getElementById('f_wll').value='';
+  document.getElementById('f_falls').value='';
+  document.getElementById('f_engineer').value='';
   updateTopbarSub();
 });
 

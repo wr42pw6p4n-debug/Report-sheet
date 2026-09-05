@@ -895,7 +895,7 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.customer || '(unnamed)'} — ${formatDateUK(entry.date)} — ${entry.visitType}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
     historySelect.appendChild(o);
   });
 }
@@ -1023,7 +1023,7 @@ async function saveReport(){
   try{
     storeSet('report_'+reportId, state);
     const idx = await loadReportIndex();
-    idx.push({id:reportId, customer:state.customer, date:state.date, visitType:state.visitType});
+    idx.push({id:reportId, customer:state.customer, idno:state.idno, date:state.date, visitType:state.visitType});
     storeSet('report_index', idx);
     await refreshHistorySelect();
     await checkUpcomingLolerReminders();

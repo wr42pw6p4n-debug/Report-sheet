@@ -325,7 +325,7 @@
           <div class="visit-toggle" id="equipTypeToggle">
             <button type="button" data-equip="CRANE" class="active">Crane</button>
             <button type="button" data-equip="LIFTING_EQUIPMENT">Lifting Equipment</button>
-            <button type="button" data-equip="FORKLIFT">Forklift Truck</button>
+            <button type="button" data-equip="FORKLIFT">FLT/Plant</button>
           </div>
         </div>
         <div class="grid" style="margin-top:10px;">
@@ -446,8 +446,8 @@ try{
   document.getElementById('sandboxBanner').style.display = 'block';
 }
 
-// ---------- checklist definition (from the original service sheet) ----------
-const CHECKLIST = [
+// ---------- checklist definitions (one per equipment type) ----------
+const CHECKLIST_CRANE = [
   {group:"Hoist", items:[
     "HOIST MOTOR","HOIST G'BOX","DRUM BRGS","PEDESTAL BRGS","OIL LEVELS (HOIST)",
     "HOIST ROPE/CHAIN","ROPE GUIDE","PRESSURE BAND","HOIST BRAKE","TOP LIMIT",
@@ -467,6 +467,44 @@ const CHECKLIST = [
   ]}
 ];
 
+const CHECKLIST_LIFTING_EQUIPMENT = [
+  {group:"Lifting Medium", items:[
+    "CHAIN / WIRE ROPE CONDITION","ROPE / CHAIN ANCHORAGE","HOOK & SAFETY CATCH",
+    "HOOK BLOCK BEARINGS","SWIVEL"
+  ]},
+  {group:"Mechanism", items:[
+    "LOAD BRAKE","GEAR CASE / HOUSING","BEARINGS","CONTROL (PENDANT/LEVER)","MOTOR (IF POWERED)"
+  ]},
+  {group:"Safety & Support", items:[
+    "TOP LIMIT","BOTTOM LIMIT","OVERLOAD PROTECTION DEVICE","SUSPENSION / SUPPORT FIXING",
+    "TROLLEY / RUNWAY (IF FITTED)","IDENTIFICATION / RATING PLATE"
+  ]}
+];
+
+const CHECKLIST_FLT_PLANT = [
+  {group:"Mast & Lifting Mechanism", items:[
+    "MAST & CHAINS","FORKS (WEAR/CRACKS)","CARRIAGE","LIFT CYLINDER","TILT CYLINDERS",
+    "HYDRAULIC HOSES & FITTINGS","ATTACHMENT (IF FITTED)"
+  ]},
+  {group:"Chassis & Running Gear", items:[
+    "TYRES / WHEELS","STEERING","SERVICE BRAKE","PARKING BRAKE","COUNTERWEIGHT / CHASSIS"
+  ]},
+  {group:"Operator Safety & Controls", items:[
+    "OVERHEAD GUARD","BACKREST EXTENSION","SEAT & SEATBELT","HORN & LIGHTS",
+    "CAPACITY / DATA PLATE","FUEL / BATTERY SYSTEM"
+  ]}
+];
+
+function checklistFor(equipType){
+  switch(equipType){
+    case 'LIFTING_EQUIPMENT': return CHECKLIST_LIFTING_EQUIPMENT;
+    case 'FORKLIFT': return CHECKLIST_FLT_PLANT;
+    default: return CHECKLIST_CRANE;
+  }
+}
+
+let CHECKLIST = CHECKLIST_CRANE;
+
 const STATUS = [
   {key:"SERV",    label:"Serviced",        color:"var(--serv)"},
   {key:"URGENT",  label:"Urgent Repair",   color:"var(--urgent)"},
@@ -477,8 +515,7 @@ const STATUS = [
 
 function slug(s){ return s.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
 
-const ITEM_IDS = [];
-CHECKLIST.forEach(g => g.items.forEach(label => ITEM_IDS.push(slug(g.group)+'__'+slug(label))));
+let ITEM_IDS = [];
 
 // ---------- state ----------
 let state = {
@@ -498,66 +535,76 @@ STATUS.forEach(s=>{
 });
 
 // ---------- render checklist ----------
+// Rebuildable so switching Equipment Type (Crane/Lifting Equipment/FLT-Plant) can
+// swap in the right checklist. Never overwrites an existing state.items[id] — that's
+// what lets a saved report reload its own answers into freshly-built rows.
 const checklistContainer = document.getElementById('checklistContainer');
-CHECKLIST.forEach(g=>{
-  const h = document.createElement('div');
-  h.className = 'subgroup-title';
-  h.textContent = g.group;
-  checklistContainer.appendChild(h);
 
-  g.items.forEach(label=>{
-    const id = slug(g.group)+'__'+slug(label);
-    state.items[id] = {status:null, note:'', photo:null, label, group:g.group};
+function buildChecklistDom(){
+  checklistContainer.innerHTML = '';
+  ITEM_IDS = [];
+  CHECKLIST.forEach(g=>{
+    const h = document.createElement('div');
+    h.className = 'subgroup-title';
+    h.textContent = g.group;
+    checklistContainer.appendChild(h);
 
-    const row = document.createElement('div');
-    row.className = 'item-row';
-    row.id = 'row_'+id;
-    row.style.borderLeftColor = 'var(--line)';
+    g.items.forEach(label=>{
+      const id = slug(g.group)+'__'+slug(label);
+      ITEM_IDS.push(id);
+      if(!state.items[id]) state.items[id] = {status:null, note:'', photo:null, label, group:g.group};
 
-    const top = document.createElement('div');
-    top.className = 'item-top';
-    const lab = document.createElement('div');
-    lab.className = 'item-label';
-    lab.textContent = label;
-    top.appendChild(lab);
+      const row = document.createElement('div');
+      row.className = 'item-row';
+      row.id = 'row_'+id;
+      row.style.borderLeftColor = 'var(--line)';
 
-    const btnWrap = document.createElement('div');
-    btnWrap.className = 'status-buttons';
-    STATUS.forEach(s=>{
-      const b = document.createElement('button');
-      b.type='button';
-      b.className='status-btn';
-      b.textContent = s.label;
-      b.dataset.status = s.key;
-      b.addEventListener('click', ()=> setStatus(id, s.key));
-      btnWrap.appendChild(b);
+      const top = document.createElement('div');
+      top.className = 'item-top';
+      const lab = document.createElement('div');
+      lab.className = 'item-label';
+      lab.textContent = label;
+      top.appendChild(lab);
+
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'status-buttons';
+      STATUS.forEach(s=>{
+        const b = document.createElement('button');
+        b.type='button';
+        b.className='status-btn';
+        b.textContent = s.label;
+        b.dataset.status = s.key;
+        b.addEventListener('click', ()=> setStatus(id, s.key));
+        btnWrap.appendChild(b);
+      });
+      top.appendChild(btnWrap);
+      row.appendChild(top);
+
+      const noteWrap = document.createElement('div');
+      noteWrap.className = 'item-note';
+      noteWrap.id = 'note_'+id;
+      const noteInput = document.createElement('input');
+      noteInput.type='text';
+      noteInput.placeholder='Describe the finding / repair needed...';
+      noteInput.addEventListener('input', e=>{
+        state.items[id].note = e.target.value;
+        renderFindings();
+      });
+      noteWrap.appendChild(noteInput);
+
+      const photoRow = document.createElement('div');
+      photoRow.className = 'photo-row';
+      photoRow.id = 'photo_'+id;
+      renderPhotoRow(id, photoRow);
+      noteWrap.appendChild(photoRow);
+
+      row.appendChild(noteWrap);
+
+      checklistContainer.appendChild(row);
     });
-    top.appendChild(btnWrap);
-    row.appendChild(top);
-
-    const noteWrap = document.createElement('div');
-    noteWrap.className = 'item-note';
-    noteWrap.id = 'note_'+id;
-    const noteInput = document.createElement('input');
-    noteInput.type='text';
-    noteInput.placeholder='Describe the finding / repair needed...';
-    noteInput.addEventListener('input', e=>{
-      state.items[id].note = e.target.value;
-      renderFindings();
-    });
-    noteWrap.appendChild(noteInput);
-
-    const photoRow = document.createElement('div');
-    photoRow.className = 'photo-row';
-    photoRow.id = 'photo_'+id;
-    renderPhotoRow(id, photoRow);
-    noteWrap.appendChild(photoRow);
-
-    row.appendChild(noteWrap);
-
-    checklistContainer.appendChild(row);
   });
-});
+}
+buildChecklistDom();
 
 function setStatus(id, statusKey){
   const item = state.items[id];
@@ -728,9 +775,29 @@ document.querySelectorAll('#visitTypeToggle button').forEach(b=>{
   b.addEventListener('click', ()=> setVisitType(b.dataset.visit));
 });
 
-function setEquipmentType(type){
+function setEquipmentType(type, opts){
+  opts = opts || {};
+  const isRestoring = opts.restoring === true;
+  const newChecklist = checklistFor(type);
+  const changed = state.loler.equipmentType !== type || CHECKLIST !== newChecklist;
+
+  if(!isRestoring && changed){
+    const hasProgress = Object.values(state.items).some(i=>i.status || i.note || i.photo);
+    if(hasProgress){
+      const ok = confirm('Switching equipment type uses a different checklist — your current checklist answers will be cleared. Continue?');
+      if(!ok){
+        document.querySelectorAll('#equipTypeToggle button').forEach(x=>x.classList.toggle('active', x.dataset.equip===state.loler.equipmentType));
+        return;
+      }
+    }
+    state.items = {};
+  }
+
   state.loler.equipmentType = type;
+  CHECKLIST = newChecklist;
   document.querySelectorAll('#equipTypeToggle button').forEach(x=>x.classList.toggle('active', x.dataset.equip===type));
+  buildChecklistDom();
+  renderFindings();
 }
 document.querySelectorAll('#equipTypeToggle button').forEach(b=>{
   b.addEventListener('click', ()=> setEquipmentType(b.dataset.equip));
@@ -1001,7 +1068,7 @@ function applyState(loaded){
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
   Object.entries(lolerFieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state.loler[key]||'');
-  setEquipmentType(state.loler.equipmentType);
+  setEquipmentType(state.loler.equipmentType, {restoring:true});
   setVisitType(state.visitType || 'Service');
   document.getElementById('f_notes').value = state.notes || '';
   ITEM_IDS.forEach(id=>{
@@ -1289,7 +1356,7 @@ document.getElementById('btnPdf').addEventListener('click', async ()=>{
 function equipmentTypeLabel(type){
   switch(type){
     case 'LIFTING_EQUIPMENT': return 'Lifting Equipment';
-    case 'FORKLIFT': return 'Forklift Truck';
+    case 'FORKLIFT': return 'FLT/Plant';
     default: return 'Crane';
   }
 }

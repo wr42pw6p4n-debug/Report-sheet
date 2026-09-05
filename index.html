@@ -13,6 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <style>
   :root{
     --steel-900:#161b22;
@@ -271,6 +272,19 @@
     <p class="report-sub" id="topbarSub">New report — not yet saved</p>
   </div>
 
+  <!-- TEAM SYNC (OneDrive) -->
+  <div class="section no-print">
+    <div class="section-head"><div class="section-tag"></div><h2>Team Sync — OneDrive</h2></div>
+    <div class="section-body">
+      <p class="note-inline" id="syncStatusText" style="margin-top:0;">Checking sync status…</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-ghost" id="btnMsSignIn" type="button" style="display:none;">🔑 Sign in with Microsoft</button>
+        <button class="btn-ghost" id="btnMsSignOut" type="button" style="display:none;">Sign out</button>
+      </div>
+      <p class="note-inline" id="syncConfigHint" style="display:none;">OneDrive sync isn't set up yet — add your Client ID, Tenant ID and shared folder link in the MS_CONFIG block near the top of the file, then re-upload.</p>
+    </div>
+  </div>
+
   <!-- COMPANY / JOB DETAILS -->
   <div class="section">
     <div class="section-head"><div class="section-tag"></div><h2>Customer &amp; Job Details</h2></div>
@@ -364,6 +378,17 @@
     <div class="section-head"><div class="section-tag"></div><h2>General Notes</h2></div>
     <div class="section-body">
       <textarea id="f_notes" placeholder="Overall observations, recommendations, parts to order..."></textarea>
+    </div>
+  </div>
+
+  <!-- LOLER RE-EXAMINATION REMINDERS -->
+  <div class="section no-print" id="reminderCard" style="display:none;">
+    <div class="section-head"><div class="section-tag" style="background:var(--urgent);"></div><h2>⏰ Upcoming Re-examinations</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Checked from LOLER reports saved on this device — due within 30 days, or overdue.</p>
+      <div id="reminderList"></div>
+      <div class="field full" style="margin-top:10px;"><label>Your email (for the reminder button below)</label><input type="email" id="reminderEmail"></div>
+      <button class="btn-ghost" id="btnEmailReminders" type="button">✉️ Email me this list</button>
     </div>
   </div>
 
@@ -876,6 +901,71 @@ async function refreshHistorySelect(){
 }
 refreshHistorySelect();
 
+// ---------- LOLER re-examination reminders ----------
+// Scans every LOLER report saved on this device — this only runs when the
+// app is actually opened, see the chat for what unattended email reminders need.
+async function checkUpcomingLolerReminders(){
+  const idx = await loadReportIndex();
+  const lolerEntries = idx.filter(e => e.visitType === 'LOLER');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()+30);
+  const due = [];
+  for(const entry of lolerEntries){
+    const full = storeGet('report_'+entry.id);
+    const nextexam = full && full.loler && full.loler.nextexam;
+    if(!nextexam) continue;
+    const dueDate = new Date(nextexam);
+    if(dueDate <= cutoff){
+      due.push({customer: entry.customer, location: full.loler.location, dueDate, overdue: dueDate < today});
+    }
+  }
+  due.sort((a,b)=> a.dueDate - b.dueDate);
+  const card = document.getElementById('reminderCard');
+  const list = document.getElementById('reminderList');
+  if(due.length === 0){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = due.map(d=>{
+    const days = Math.round((d.dueDate - today)/86400000);
+    const tag = d.overdue ? `<span class="badge urgent" style="position:static;">OVERDUE</span>` : `<span class="badge monitor" style="position:static;">${days} day${days===1?'':'s'} left</span>`;
+    return `<div class="finding-card ${d.overdue?'':'monitor'}" style="align-items:center;">
+      <div style="flex:1;">
+        <div style="font-weight:700;font-size:13.5px;">${d.customer || '(unnamed customer)'}${d.location?' — '+d.location:''}</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);">Next examination due ${formatDateUK(d.dueDate.toISOString().slice(0,10))}</div>
+      </div>
+      ${tag}
+    </div>`;
+  }).join('');
+}
+checkUpcomingLolerReminders();
+
+const reminderEmailInput = document.getElementById('reminderEmail');
+reminderEmailInput.value = storeGet('reminder_email') || '';
+reminderEmailInput.addEventListener('input', ()=> storeSet('reminder_email', reminderEmailInput.value));
+
+document.getElementById('btnEmailReminders').addEventListener('click', async ()=>{
+  const idx = await loadReportIndex();
+  const lolerEntries = idx.filter(e => e.visitType === 'LOLER');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()+30);
+  const lines = [];
+  for(const entry of lolerEntries){
+    const full = storeGet('report_'+entry.id);
+    const nextexam = full && full.loler && full.loler.nextexam;
+    if(!nextexam) continue;
+    const dueDate = new Date(nextexam);
+    if(dueDate <= cutoff){
+      lines.push(`- ${entry.customer||'(unnamed)'}${full.loler.location?' — '+full.loler.location:''}: due ${formatDateUK(nextexam)}${dueDate<today?' (OVERDUE)':''}`);
+    }
+  }
+  if(lines.length===0){ setStatusMsg('Nothing due within 30 days.', 'ok'); return; }
+  const to = reminderEmailInput.value.trim();
+  if(!to){ setStatusMsg('Add your email address above first.', 'err'); return; }
+  const subject = 'LOLER re-examinations due soon';
+  const body = 'Equipment due for LOLER thorough examination within 30 days:\n\n' + lines.join('\n');
+  window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  setStatusMsg('Opening your mail app with the reminder list.', 'ok');
+});
+
 historySelect.addEventListener('change', async ()=>{
   if(!historySelect.value) return;
   try{
@@ -936,6 +1026,7 @@ async function saveReport(){
     idx.push({id:reportId, customer:state.customer, date:state.date, visitType:state.visitType});
     storeSet('report_index', idx);
     await refreshHistorySelect();
+    await checkUpcomingLolerReminders();
     return true;
   }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); return false; }
 }
@@ -975,7 +1066,27 @@ document.getElementById('btnComplete').addEventListener('click', async ()=>{
 });
 
 // ---------- print ----------
-document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
+// Printing the raw on-screen app (all 40+ checklist rows, every field, the
+// signature pad, saved reports...) is what was producing 8-page printouts.
+// Print the same compact report the download buttons generate instead.
+document.getElementById('btnPrint').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnPrint');
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try{
+    const doc = state.visitType === 'LOLER' ? await buildLolerPdfBlob() : await buildPdfBlob();
+    const blobUrl = doc.output('bloburl');
+    const w = window.open(blobUrl, '_blank');
+    if(w){
+      setStatusMsg('Report opened in a new tab — use the Share/Print icon there to print it.', 'ok');
+    } else {
+      setStatusMsg('Pop-up blocked — allow pop-ups for this site, or use Download PDF instead and print from there.', 'err');
+    }
+  }catch(e){
+    setStatusMsg('Could not prepare the report for printing: '+e.message, 'err');
+  }finally{
+    btn.disabled = false; btn.textContent = '🖨️ Print';
+  }
+});
 
 // ---------- PDF ----------
 function statusColor(key){

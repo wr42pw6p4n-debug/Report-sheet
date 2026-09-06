@@ -318,8 +318,8 @@
         </div>
       </div>
 
-      <div id="lolerFields" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
-        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">LOLER 1998 thorough examination details — Sections A, B and C below fill in automatically from your findings above.</p>
+      <div id="equipTypeWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">Choose the equipment type first — it decides which checklist you'll fill in below. The rest of the LOLER paperwork and sign-off appears at the end, after the checklist.</p>
         <div class="field">
           <label>Equipment Type</label>
           <div class="visit-toggle" id="equipTypeToggle">
@@ -327,37 +327,6 @@
             <button type="button" data-equip="LIFTING_EQUIPMENT">Lifting Equipment</button>
             <button type="button" data-equip="FORKLIFT">FLT/Plant</button>
           </div>
-        </div>
-        <div class="grid" style="margin-top:10px;">
-          <div class="field full"><label>Location of Equipment</label><input type="text" id="loler_location"></div>
-          <div class="field"><label>Make &amp; Serial No.</label><input type="text" id="loler_makeserial"></div>
-          <div class="field"><label>SWL / Rated Capacity</label><input type="text" id="loler_swl"></div>
-          <div class="field full"><label>Description of Lifting Equipment</label><input type="text" id="loler_description" placeholder="e.g. mast type, attachment, fuel type, load centre"></div>
-          <div class="field"><label>Date of Previous Examination</label><input type="date" id="loler_prevexam"></div>
-          <div class="field"><label>Date of Next Examination</label><input type="date" id="loler_nextexam"></div>
-          <div class="field"><label>Our Ref</label><input type="text" id="loler_ourref" placeholder="KE-"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LOLER SECTIONS -->
-  <div class="section" id="lolerSectionsCard" style="display:none;">
-    <div class="section-head"><div class="section-tag"></div><h2>LOLER Report Sections</h2></div>
-    <div class="section-body">
-      <p class="note-inline" style="margin-top:-4px;">Urgent Repairs feed Section A, Req's Attention feeds Section B, Monitor feeds Section C. Add anything extra below — it's included alongside the auto-filled list.</p>
-      <div class="field full"><label>A — Defects which could cause a danger to persons</label><div id="lolerPreviewA" class="loler-preview"></div><textarea id="loler_extraA" placeholder="Additional Section A notes (optional)"></textarea></div>
-      <div class="field full"><label>B — Other parts requiring rectification</label><div id="lolerPreviewB" class="loler-preview"></div><textarea id="loler_extraB" placeholder="Additional Section B notes (optional)"></textarea></div>
-      <div class="field full"><label>C — Observations and recommendations</label><div id="lolerPreviewC" class="loler-preview"></div><textarea id="loler_extraC" placeholder="Additional Section C notes (optional)"></textarea></div>
-
-      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
-        <div class="field full"><label>Inspecting Engineer (sign-off name)</label><input type="text" id="loler_signname" placeholder="Name as it should appear on the certificate"></div>
-        <div class="field full">
-          <label>Signature</label>
-          <div class="sig-wrap">
-            <canvas id="sigCanvas"></canvas>
-          </div>
-          <button type="button" class="btn-ghost" id="sigClear" style="margin-top:8px;">✕ Clear signature</button>
         </div>
       </div>
     </div>
@@ -378,6 +347,44 @@
     <div class="section-body">
       <p class="note-inline" style="margin-top:-4px;">Automatically collected from every item marked <b>Urgent Repair</b> or <b>Req's Attention</b> above — this is the at-a-glance repairs list.</p>
       <div id="findingsList"></div>
+    </div>
+  </div>
+
+  <!-- LOLER DETAILS + SECTIONS — placed after the checklist and findings, so the
+       checklist gets done first and the LOLER paperwork/sign-off happens last -->
+  <div class="section" id="lolerFields" style="display:none;">
+    <div class="section-head"><div class="section-tag"></div><h2>LOLER Examination Details</h2></div>
+    <div class="section-body">
+      <div class="grid">
+        <div class="field full"><label>Location of Equipment</label><input type="text" id="loler_location"></div>
+        <div class="field"><label>Make &amp; Serial No.</label><input type="text" id="loler_makeserial"></div>
+        <div class="field"><label>SWL / Rated Capacity</label><input type="text" id="loler_swl"></div>
+        <div class="field full"><label>Description of Lifting Equipment</label><input type="text" id="loler_description" placeholder="e.g. mast type, attachment, fuel type, load centre"></div>
+        <div class="field"><label>Date of Previous Examination</label><input type="date" id="loler_prevexam"></div>
+        <div class="field"><label>Date of Next Examination</label><input type="date" id="loler_nextexam"></div>
+        <div class="field"><label>Our Ref</label><input type="text" id="loler_ourref" placeholder="KE-"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="lolerSectionsCard" style="display:none;">
+    <div class="section-head"><div class="section-tag"></div><h2>LOLER Report Sections</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Urgent Repairs feed Section A, Req's Attention feeds Section B, Monitor feeds Section C. Add anything extra below — it's included alongside the auto-filled list.</p>
+      <div class="field full"><label>A — Defects which could cause a danger to persons</label><div id="lolerPreviewA" class="loler-preview"></div><textarea id="loler_extraA" placeholder="Additional Section A notes (optional)"></textarea></div>
+      <div class="field full"><label>B — Other parts requiring rectification</label><div id="lolerPreviewB" class="loler-preview"></div><textarea id="loler_extraB" placeholder="Additional Section B notes (optional)"></textarea></div>
+      <div class="field full"><label>C — Observations and recommendations</label><div id="lolerPreviewC" class="loler-preview"></div><textarea id="loler_extraC" placeholder="Additional Section C notes (optional)"></textarea></div>
+
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+        <div class="field full"><label>Inspecting Engineer (sign-off name)</label><input type="text" id="loler_signname" placeholder="Name as it should appear on the certificate"></div>
+        <div class="field full">
+          <label>Signature</label>
+          <div class="sig-wrap">
+            <canvas id="sigCanvas"></canvas>
+          </div>
+          <button type="button" class="btn-ghost" id="sigClear" style="margin-top:8px;">✕ Clear signature</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -751,8 +758,9 @@ Object.entries(lolerFieldMap).forEach(([elId,key])=>{
 
 function setVisitType(type){
   state.visitType = type;
-  document.querySelectorAll('.visit-toggle button').forEach(x=>x.classList.toggle('active', x.dataset.visit===type));
+  document.querySelectorAll('#visitTypeToggle button').forEach(x=>x.classList.toggle('active', x.dataset.visit===type));
   const isLoler = type === 'LOLER';
+  document.getElementById('equipTypeWrap').style.display = isLoler ? 'block' : 'none';
   document.getElementById('lolerFields').style.display = isLoler ? 'block' : 'none';
   document.getElementById('lolerSectionsCard').style.display = isLoler ? 'block' : 'none';
   document.getElementById('btnLoler').style.display = isLoler ? '' : 'none';
@@ -1147,7 +1155,7 @@ document.getElementById('btnComplete').addEventListener('click', async ()=>{
   const ok = await saveReport();
   btn.disabled = false; btn.textContent = '✅ Complete & start new';
   if(!ok) return;
-  applyState(freshState(true)); // keeps your name filled in for the next job
+  applyState(freshState(false)); // engineer name clears too — don't want to risk it lingering from whoever did the last job
   companySelect.value = '';
   setStatusMsg('Report saved. Clean sheet ready for the next crane.', 'ok');
   window.scrollTo({top:0, behavior:'smooth'});

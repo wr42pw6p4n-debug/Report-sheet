@@ -1342,7 +1342,7 @@ async function buildPdfBlob(){
 
 function reportFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
-  return `Crane_Service_Report_${cust}_${state.date}.pdf`;
+  return `${cust}_${state.visitType}_${state.date}.pdf`;
 }
 
 document.getElementById('btnPdf').addEventListener('click', async ()=>{
@@ -1372,7 +1372,7 @@ function equipmentTypeLabel(type){
 function lolerFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
   const equip = equipmentTypeLabel(state.loler.equipmentType).replace(/[^a-z0-9]+/gi,'_');
-  return `LOLER_${equip}_${cust}_${state.date}.pdf`;
+  return `${cust}_LOLER_${equip}_${state.date}.pdf`;
 }
 
 async function buildLolerPdfBlob(){
@@ -1587,21 +1587,45 @@ function reportPlainText(full){
   ].join('\n');
 }
 
-document.getElementById('btnEmail').addEventListener('click', ()=>{
+document.getElementById('btnEmail').addEventListener('click', async ()=>{
   if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
+  const btn = document.getElementById('btnEmail');
   const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
-  let body = reportPlainText(false);
 
-  // mailto: links silently fail past ~1800-2000 chars in most browsers —
-  // keep trimming until the whole URL is comfortably under that limit
-  let mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  if(mailto.length > 1700){
-    body = `Crane Service Report for ${state.customer||'—'} — ${state.date}.\nEngineer: ${state.engineer||'n/a'}.\nSee attached PDF for full findings and notes.`;
-    mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  // Try to actually attach the PDF via the device's native share sheet — this is
+  // the only route a website has to hand a real file to the Mail app. It can't
+  // pre-fill the "To" address though (no browser API allows that with a file
+  // attached — that's a genuine OS security boundary), so the address is copied
+  // to your clipboard to paste in with one tap instead.
+  try{
+    btn.disabled = true; btn.textContent = 'Preparing PDF…';
+    const pdf = state.visitType === 'LOLER' ? await buildLolerPdfBlob() : await buildPdfBlob();
+    const filename = state.visitType === 'LOLER' ? lolerFilename() : reportFilename();
+    const file = new File([pdf.output('blob')], filename, {type:'application/pdf'});
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.clipboard && navigator.clipboard.writeText(state.email).catch(()=>{});
+      await navigator.share({ files:[file], title: subject, text: reportPlainText(false) });
+      setStatusMsg('Choose Mail from the share sheet — the PDF is already attached. Paste '+state.email+' into "To" (already copied for you).', 'ok');
+    } else {
+      throw new Error('SHARE_UNSUPPORTED');
+    }
+  }catch(e){
+    if(e.name === 'AbortError'){ /* user cancelled the share sheet — not an error */ }
+    else {
+      // fallback for browsers that can't share files: old mailto + manual attach
+      let body = reportPlainText(false);
+      let mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      if(mailto.length > 1700){
+        body = `Crane Service Report for ${state.customer||'—'} — ${state.date}.\nEngineer: ${state.engineer||'n/a'}.\nSee attached PDF for full findings and notes.`;
+        mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      }
+      window.location.href = mailto;
+      setStatusMsg('Your browser can\'t attach files directly — opening your mail app instead. Attach the downloaded PDF manually, then send.', 'ok');
+    }
+  }finally{
+    btn.disabled = false; btn.textContent = '✉️ Email customer';
   }
-
-  window.location.href = mailto;
-  setStatusMsg('Opening your mail app to '+state.email+' — attach the downloaded PDF, then send. If nothing opens, use "Copy report text" instead and paste it into a new email manually.', 'ok');
 });
 
 document.getElementById('btnCopyText').addEventListener('click', async ()=>{

@@ -535,11 +535,24 @@ let state = {
 
 // ---------- render legend ----------
 const legendEl = document.getElementById('legend');
+function serviceStatusLabel(){
+  return state.visitType === 'Inspection' ? 'Inspected' : 'Serviced';
+}
+function labelFor(s){
+  return s.key === 'SERV' ? serviceStatusLabel() : s.label;
+}
 STATUS.forEach(s=>{
   const span = document.createElement('span');
-  span.innerHTML = `<i style="background:${s.color}"></i>${s.label}`;
+  span.dataset.statusKey = s.key;
+  span.innerHTML = `<i style="background:${s.color}"></i><span class="legend-text">${labelFor(s)}</span>`;
   legendEl.appendChild(span);
 });
+
+function refreshServiceLabels(){
+  document.querySelectorAll('.status-btn[data-status="SERV"]').forEach(b=> b.textContent = serviceStatusLabel());
+  const legendSpan = legendEl.querySelector('span[data-status-key="SERV"] .legend-text');
+  if(legendSpan) legendSpan.textContent = serviceStatusLabel();
+}
 
 // ---------- render checklist ----------
 // Rebuildable so switching Equipment Type (Crane/Lifting Equipment/FLT-Plant) can
@@ -579,7 +592,7 @@ function buildChecklistDom(){
         const b = document.createElement('button');
         b.type='button';
         b.className='status-btn';
-        b.textContent = s.label;
+        b.textContent = labelFor(s);
         b.dataset.status = s.key;
         b.addEventListener('click', ()=> setStatus(id, s.key));
         btnWrap.appendChild(b);
@@ -759,6 +772,7 @@ Object.entries(lolerFieldMap).forEach(([elId,key])=>{
 function setVisitType(type){
   state.visitType = type;
   document.querySelectorAll('#visitTypeToggle button').forEach(x=>x.classList.toggle('active', x.dataset.visit===type));
+  refreshServiceLabels();
   const isLoler = type === 'LOLER';
   document.getElementById('equipTypeWrap').style.display = isLoler ? 'block' : 'none';
   document.getElementById('lolerFields').style.display = isLoler ? 'block' : 'none';
@@ -1196,6 +1210,7 @@ function statusColor(key){
   }
 }
 function statusLabel(key){
+  if(key === 'SERV') return serviceStatusLabel();
   const s = STATUS.find(s=>s.key===key);
   return s ? s.label : 'Not checked';
 }

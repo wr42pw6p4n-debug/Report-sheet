@@ -536,7 +536,7 @@ let state = {
 // ---------- render legend ----------
 const legendEl = document.getElementById('legend');
 function serviceStatusLabel(){
-  return state.visitType === 'Inspection' ? 'Inspected' : 'Serviced';
+  return (state.visitType === 'Inspection' || state.visitType === 'LOLER') ? 'Inspected' : 'Serviced';
 }
 function labelFor(s){
   return s.key === 'SERV' ? serviceStatusLabel() : s.label;

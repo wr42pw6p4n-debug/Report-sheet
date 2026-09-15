@@ -319,7 +319,7 @@
       </div>
 
       <div id="equipTypeWrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
-        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">Choose the equipment type first — it decides which checklist you'll fill in below. The rest of the LOLER paperwork and sign-off appears at the end, after the checklist.</p>
+        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">Choose the equipment type first — it decides which checklist you'll fill in below.</p>
         <div class="field">
           <label>Equipment Type</label>
           <div class="visit-toggle" id="equipTypeToggle">
@@ -327,6 +327,19 @@
             <button type="button" data-equip="LIFTING_EQUIPMENT">Lifting Equipment</button>
             <button type="button" data-equip="FORKLIFT">FLT/Plant</button>
           </div>
+        </div>
+      </div>
+
+      <div id="lolerFields" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+        <p class="note-inline" style="margin-top:0; margin-bottom:10px;">Fill in what you're examining first, then work through the checklist below. Sections A/B/C and sign-off appear at the end, after the checklist.</p>
+        <div class="grid">
+          <div class="field full"><label>Location of Equipment</label><input type="text" id="loler_location"></div>
+          <div class="field"><label>Make &amp; Serial No.</label><input type="text" id="loler_makeserial"></div>
+          <div class="field"><label>SWL / Rated Capacity</label><input type="text" id="loler_swl"></div>
+          <div class="field full"><label>Description of Lifting Equipment</label><input type="text" id="loler_description" placeholder="e.g. mast type, attachment, fuel type, load centre"></div>
+          <div class="field"><label>Date of Previous Examination</label><input type="date" id="loler_prevexam"></div>
+          <div class="field"><label>Date of Next Examination</label><input type="date" id="loler_nextexam"></div>
+          <div class="field"><label>Our Ref</label><input type="text" id="loler_ourref" placeholder="KE-"></div>
         </div>
       </div>
     </div>
@@ -350,23 +363,7 @@
     </div>
   </div>
 
-  <!-- LOLER DETAILS + SECTIONS — placed after the checklist and findings, so the
-       checklist gets done first and the LOLER paperwork/sign-off happens last -->
-  <div class="section" id="lolerFields" style="display:none;">
-    <div class="section-head"><div class="section-tag"></div><h2>LOLER Examination Details</h2></div>
-    <div class="section-body">
-      <div class="grid">
-        <div class="field full"><label>Location of Equipment</label><input type="text" id="loler_location"></div>
-        <div class="field"><label>Make &amp; Serial No.</label><input type="text" id="loler_makeserial"></div>
-        <div class="field"><label>SWL / Rated Capacity</label><input type="text" id="loler_swl"></div>
-        <div class="field full"><label>Description of Lifting Equipment</label><input type="text" id="loler_description" placeholder="e.g. mast type, attachment, fuel type, load centre"></div>
-        <div class="field"><label>Date of Previous Examination</label><input type="date" id="loler_prevexam"></div>
-        <div class="field"><label>Date of Next Examination</label><input type="date" id="loler_nextexam"></div>
-        <div class="field"><label>Our Ref</label><input type="text" id="loler_ourref" placeholder="KE-"></div>
-      </div>
-    </div>
-  </div>
-
+  <!-- LOLER SECTIONS + SIGN-OFF — stays at the end, after the checklist -->
   <div class="section" id="lolerSectionsCard" style="display:none;">
     <div class="section-head"><div class="section-tag"></div><h2>LOLER Report Sections</h2></div>
     <div class="section-body">

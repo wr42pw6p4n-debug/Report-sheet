@@ -1367,7 +1367,8 @@ async function buildPdfBlob(){
 
 function reportFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
-  return `${cust}_${state.visitType}_${state.date}.pdf`;
+  const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
+  return `${cust}${craneNo?'_'+craneNo:''}_${state.visitType}_${state.date}.pdf`;
 }
 
 document.getElementById('btnPdf').addEventListener('click', async ()=>{
@@ -1396,8 +1397,9 @@ function equipmentTypeLabel(type){
 
 function lolerFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
+  const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
   const equip = equipmentTypeLabel(state.loler.equipmentType).replace(/[^a-z0-9]+/gi,'_');
-  return `${cust}_LOLER_${equip}_${state.date}.pdf`;
+  return `${cust}${craneNo?'_'+craneNo:''}_LOLER_${equip}_${state.date}.pdf`;
 }
 
 async function buildLolerPdfBlob(){

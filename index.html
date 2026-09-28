@@ -274,6 +274,7 @@
     .section{border:1px solid #999; break-inside:avoid; margin:8px 0;}
     .topbar::after{display:none;}
   }
+@media(max-width:560px){#dashStats{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}}
 </style>
 </head>
 <body>
@@ -295,6 +296,7 @@
     <h1 class="report-title">Crane Service Report</h1>
     <p class="report-sub" id="topbarSub">New report — not yet saved</p>
   </div>
+  <div class="section no-print" id="quickDashboard"><div class="section-head"><div class="section-tag" style="background:var(--serv);"></div><h2>Quick Dashboard</h2></div><div class="section-body"><div id="dashStats" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn-ghost" id="dashNew" type="button">➕ New report</button><button class="btn-ghost" id="dashRepairs" type="button">🔧 Repairs outstanding</button><button class="btn-ghost" id="dashHistory" type="button">📁 Previous reports</button><button class="btn-ghost" id="dashLoler" type="button">⏰ LOLER due</button></div></div></div>
 
   <!-- TEAM SYNC (OneDrive) -->
   <div class="section no-print">
@@ -315,7 +317,7 @@
   <div class="section">
     <div class="section-head"><div class="section-tag"></div><h2>Customer &amp; Job Details</h2></div>
     <div class="section-body">
-      <div class="company-row">
+      <div class="company-row"><div class="field"><label for="companySearch">🔎 Find customer</label><input type="search" id="companySearch" placeholder="Start typing a customer name…" autocomplete="off"></div>
         <div class="field">
           <label for="companySelect">Company on file</label>
           <select id="companySelect"><option value="">— Select a saved company —</option></select>
@@ -331,9 +333,9 @@
         <div class="field"><label>Crane number</label><input type="text" id="f_number"></div>
         <div class="field"><label>Hoist WLL</label><input type="text" id="f_wll"></div>
         <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
-        <div class="field"><label>Customer email</label><input type="email" id="f_email"></div>
+        <div class="field"><label>Customer email</label><input type="email" id="f_email"></div><div class="field"><label>Report reference</label><input type="text" id="f_reportNo" readonly placeholder="Generated when saved"></div>
         <div class="field"><label>Date</label><input type="date" id="f_date"></div>
-        <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
+        <div class="field"><label>Engineer</label><input type="text" id="f_engineer" list="engineerList" placeholder="Your name"><datalist id="engineerList"><option value="Dave"><option value="Jono"><option value="Ricky"><option value="Jordan"><option value="Martyn"><option value="Ashleigh"></datalist></div>
         <div class="field">
           <label>Type of visit</label>
           <div class="visit-toggle" id="visitTypeToggle">
@@ -632,7 +634,7 @@ let ITEM_IDS = [];
 
 // ---------- state ----------
 let state = {
-  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
+  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
@@ -856,7 +858,7 @@ renderFindings();
 
 // ---------- field bindings ----------
 const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
-  f_wll:'wll', f_falls:'falls', f_email:'email', f_date:'date', f_engineer:'engineer'};
+  f_wll:'wll', f_falls:'falls', f_email:'email', f_reportNo:'reportNo', f_date:'date', f_engineer:'engineer'};
 Object.entries(fieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
   el.value = state[key];
@@ -1068,7 +1070,9 @@ companySelect.addEventListener('change', ()=>{
   // only the customer's own details carry over — everything crane-specific
   // starts blank since the same customer can have several different cranes
   state.customer=c.customer||''; state.email=c.email||'';
-  state.manufacturer=''; state.idno=''; state.number=''; state.wll=''; state.falls=''; state.engineer='';
+  // Keep the engineer who is completing the report; selecting a customer should
+  // never unexpectedly clear the person doing the inspection.
+  state.manufacturer=''; state.idno=''; state.number=''; state.wll=''; state.falls='';
   document.getElementById('f_customer').value=state.customer;
   document.getElementById('f_email').value=state.email;
   document.getElementById('f_manufacturer').value='';
@@ -1076,7 +1080,7 @@ companySelect.addEventListener('change', ()=>{
   document.getElementById('f_number').value='';
   document.getElementById('f_wll').value='';
   document.getElementById('f_falls').value='';
-  document.getElementById('f_engineer').value='';
+  document.getElementById('f_engineer').value=state.engineer||'';
   updateTopbarSub();
 });
 
@@ -1109,7 +1113,7 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
+    o.textContent = `${entry.reportNo || 'No ref'} · ${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
     historySelect.appendChild(o);
   });
 }
@@ -1235,18 +1239,18 @@ function setStatusMsg(msg, type){
 // ---------- save report ----------
 async function saveReport(){
   if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
-  const reportId = Date.now().toString();
   try{
-    storeSet('report_'+reportId, state);
-    const idx = await loadReportIndex();
-    idx.push({id:reportId, customer:state.customer, idno:state.idno, date:state.date, visitType:state.visitType});
-    storeSet('report_index', idx);
-    await refreshHistorySelect();
-    await checkUpcomingLolerReminders();
-    try{ wkRender(); }catch(e){ /* weekly list is a bonus — never block a save */ }
-    try{ syncAfterSave({id:reportId, r:state}); }catch(e){ /* sync must never block a save */ }
+    const reportId=state._reportId||Date.now().toString();
+    if(!state.reportNo){const y=(state.date||new Date().toISOString().slice(0,10)).slice(0,4);const n=Number(storeGet('report_sequence_'+y)||0)+1;storeSet('report_sequence_'+y,n);state.reportNo=`KE-${y}-${String(n).padStart(4,'0')}`;}
+    state._reportId=reportId; storeSet('report_'+reportId,state);
+    let idx=await loadReportIndex(); const entry={id:reportId,reportNo:state.reportNo,customer:state.customer,idno:state.idno,date:state.date,visitType:state.visitType,engineer:state.engineer};
+    const at=idx.findIndex(x=>x.id===reportId); if(at>=0) idx[at]=entry; else idx.push(entry); storeSet('report_index',idx);
+    await refreshHistorySelect(); await checkUpcomingLolerReminders(); try{wkRender();}catch(e){} try{syncAfterSave({id:reportId,r:state});}catch(e){}
+    document.getElementById('f_reportNo').value=state.reportNo; updateTopbarSub(); if(typeof updateDashboard==='function') updateDashboard();
+    // The report is safely stored now, so the recoverable draft can be removed.
+    clearDraft();
     return true;
-  }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); return false; }
+  }catch(e){setStatusMsg('Could not save report: '+e.message,'err');return false;}
 }
 
 document.getElementById('btnSave').addEventListener('click', async ()=>{
@@ -1261,7 +1265,7 @@ function freshState(keepEngineer){
     items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
   });
   return {
-    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'',
+    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
     visitType:'Service', notes:'',
@@ -2462,6 +2466,53 @@ document.getElementById('btnMsSignOut').addEventListener('click', async ()=>{
 });
 document.getElementById('btnSyncNow').addEventListener('click', syncRun);
 
+// ---------- Draft recovery ----------
+// Keep an unfinished report available if the browser/app is closed accidentally.
+// A saved/completed report is never replaced by the draft; the engineer is simply
+// offered the choice to resume it when the app opens again.
+function clearDraft(){
+  try{ localStorage.removeItem('crane_report_draft_report'); localStorage.removeItem('crane_report_draft_report_time'); }catch(e){}
+}
+function restoreDraftIfAvailable(){
+  try{
+    const draft=storeGet('draft_report');
+    if(!draft || !draft.customer) return;
+    const stamp=storeGet('draft_report_time');
+    const when=stamp ? new Date(stamp) : null;
+    const age=when && !isNaN(when) ? Math.round((Date.now()-when.getTime())/60000) : null;
+    const ageText=age===null ? '' : age<1 ? 'just now' : age<60 ? age+' minute'+(age===1?'':'s')+' ago' : Math.round(age/60)+' hour'+(Math.round(age/60)===1?'':'s')+' ago';
+    if(confirm('An unfinished report was found'+(ageText?' ('+ageText+')':'')+' for '+draft.customer+'.\n\nResume it?')){
+      state=draft;
+      applyState(state);
+      setStatusMsg('Unfinished report restored.', 'ok');
+    }else{ clearDraft(); }
+  }catch(e){}
+}
+
+// ---------- Workflow upgrades ----------
+function updateDashboard(){const idx=storeGet('report_index')||[];let repairs=0,due=0;idx.forEach(e=>{const r=storeGet('report_'+e.id);if(!r)return;Object.values(r.items||{}).forEach(it=>{if(it&&(it.status==='URGENT'||it.status==='ATTN'))repairs++;});if(e.visitType==='LOLER'&&r.loler&&r.loler.nextexam){const d=new Date(r.loler.nextexam+'T00:00:00'),n=new Date();n.setHours(0,0,0,0);const c=new Date(n);c.setDate(c.getDate()+30);if(d<=c)due++;}});const customers=storeGet('companies')||[];const data=[['Reports',idx.length],['Customers',customers.length],['Repairs',repairs],['LOLER due',due]];const box=document.getElementById('dashStats');if(box)box.innerHTML=data.map(x=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center;background:#fff"><div style="font-size:20px;font-weight:800">${x[1]}</div><div style="font-size:11px;color:var(--ink-soft)">${x[0]}</div></div>`).join('');}
+document.getElementById('dashNew').addEventListener('click',()=>{if(state.customer&&!confirm('Start a new report? Make sure the current report is saved first.'))return;state=freshState(true);applyState(state);document.getElementById('companySelect').value='';document.getElementById('companySearch').value='';});
+document.getElementById('dashHistory').addEventListener('click',()=>document.getElementById('reportHistorySelect').scrollIntoView({behavior:'smooth',block:'center'}));
+document.getElementById('dashRepairs').addEventListener('click',()=>document.getElementById('wkList').scrollIntoView({behavior:'smooth',block:'center'}));
+document.getElementById('dashLoler').addEventListener('click',()=>document.getElementById('reminderCard').scrollIntoView({behavior:'smooth',block:'center'}));
+const companySearch=document.getElementById('companySearch');companySearch.addEventListener('input',()=>{const q=companySearch.value.trim().toLowerCase();companySelect.innerHTML='<option value="">— Select a saved company —</option>';companiesCache.forEach((c,i)=>{if(!q||(c.customer||'').toLowerCase().includes(q)){const o=document.createElement('option');o.value=i;o.textContent=c.customer||'(unnamed company)';companySelect.appendChild(o);}});});
+let autoSaveTimer;
+function scheduleDraftSave(){
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer=setTimeout(()=>{
+    try{
+      // Never turn a deliberately completed/blank sheet into a draft.
+      if(!state.customer) return;
+      storeSet('draft_report',state);
+      storeSet('draft_report_time',new Date().toISOString());
+    }catch(e){}
+  },800);
+}
+Object.keys(fieldMap).forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',scheduleDraftSave);});
+document.getElementById('f_notes').addEventListener('input',scheduleDraftSave);
+setInterval(scheduleDraftSave,5000);
+updateDashboard();
+restoreDraftIfAvailable();
 syncInit();
 
 updateTopbarSub();

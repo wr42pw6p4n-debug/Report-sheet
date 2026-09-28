@@ -14,6 +14,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
   :root{
     --steel-900:#161b22;
@@ -267,6 +269,22 @@
     .report-title{font-size:28px;}
   }
 
+
+  /* Equipment QR / customer portal */
+  .qr-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--steel-50);}
+  .qr-preview{width:150px;height:150px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:6px;}
+  .qr-preview canvas,.qr-preview img{max-width:100%;height:auto;}
+  .equipment-history{display:grid;gap:8px;margin-top:10px;}
+  .equipment-history-card{border:1px solid var(--line);border-left:5px solid var(--steel-700);border-radius:8px;padding:10px;background:#fff;}
+  .equipment-history-card.loler{border-left-color:var(--serv);}
+  .equipment-history-card .eh-title{font-weight:800;font-size:13.5px;}
+  .equipment-history-card .eh-meta{font-size:12px;color:var(--ink-soft);margin-top:3px;}
+  .qr-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100;display:none;align-items:center;justify-content:center;padding:18px;}
+  .qr-modal.open{display:flex;}
+  .qr-modal-inner{width:min(520px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;padding:16px;}
+  #qrReader{width:100%;border-radius:8px;overflow:hidden;background:#111;}
+  .portal-link{word-break:break-all;font-size:12px;padding:9px;background:#f7f8fa;border:1px solid var(--line);border-radius:7px;}
+
   /* print */
   @media print{
     .action-bar, .no-print{display:none !important;}
@@ -413,6 +431,26 @@
     </div>
   </div>
 
+  <!-- EQUIPMENT ID / QR -->
+  <div class="section no-print" id="equipmentQrCard">
+    <div class="section-head"><div class="section-tag" style="background:var(--na);"></div><h2>Equipment QR &amp; History</h2></div>
+    <div class="section-body">
+      <div class="qr-box">
+        <div id="equipmentQr" class="qr-preview"><span class="note-inline">QR appears when equipment is saved.</span></div>
+        <div style="flex:1;min-width:220px;">
+          <div class="field"><label>Permanent Equipment ID</label><input id="f_equipmentId" type="text" readonly placeholder="Generated when saved"></div>
+          <p class="note-inline">This ID belongs to the crane/equipment, not just this report. Print the QR on the LOLER certificate or a label and keep it with the equipment.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-ghost" id="btnGenerateQr" type="button">🔲 Generate QR</button>
+            <button class="btn-ghost" id="btnPrintQr" type="button">🖨️ Print QR label</button>
+            <button class="btn-ghost" id="btnScanQr" type="button">📷 Scan QR</button>
+          </div>
+        </div>
+      </div>
+      <div id="equipmentHistory" class="equipment-history"></div>
+    </div>
+  </div>
+
   <!-- NOTES -->
   <div class="section">
     <div class="section-head"><div class="section-tag"></div><h2>General Notes</h2></div>
@@ -429,6 +467,16 @@
       <div id="reminderList"></div>
       <div class="field full" style="margin-top:10px;"><label>Your email (for the reminder button below)</label><input type="email" id="reminderEmail"></div>
       <button class="btn-ghost" id="btnEmailReminders" type="button">✉️ Email me this list</button>
+    </div>
+  </div>
+
+  <!-- CUSTOMER PORTAL -->
+  <div class="section no-print" id="customerPortalCard">
+    <div class="section-head"><div class="section-tag" style="background:var(--serv);"></div><h2>Customer Read-Only Portal</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Create a private, read-only customer portal in your shared OneDrive. The customer gets a view-only link to their reports; they cannot edit the reports through the portal.</p>
+      <button class="btn-ghost" id="btnCustomerPortal" type="button">🔗 Create / update customer portal</button>
+      <div id="portalResult" style="display:none;margin-top:10px;"></div>
     </div>
   </div>
 
@@ -490,6 +538,17 @@
   </div>
 
   <div style="height:6px;"></div>
+</div>
+
+<div class="qr-modal" id="qrModal">
+  <div class="qr-modal-inner">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+      <h2 style="margin:0;font-family:Oswald,sans-serif;">Scan Equipment QR</h2>
+      <button class="btn-ghost" id="btnCloseQr" type="button">✕ Close</button>
+    </div>
+    <div id="qrReader"></div>
+    <p class="note-inline" id="qrScanStatus">Point the camera at a Key Engineering equipment QR code.</p>
+  </div>
 </div>
 
 <div class="action-bar no-print">
@@ -634,7 +693,7 @@ let ITEM_IDS = [];
 
 // ---------- state ----------
 let state = {
-  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'',
+  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'', equipmentId:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
@@ -1199,6 +1258,9 @@ function applyState(loaded){
   if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'};
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
+  document.getElementById('f_equipmentId').value = state.equipmentId || '';
+  renderEquipmentQr();
+  renderEquipmentHistory();
   Object.entries(lolerFieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state.loler[key]||'');
   setEquipmentType(state.loler.equipmentType, {restoring:true});
   setVisitType(state.visitType || 'Service');
@@ -1236,17 +1298,182 @@ function setStatusMsg(msg, type){
   statusTimer = setTimeout(()=>{ el.textContent=''; el.className='status-msg no-print'; }, 6000);
 }
 
+// ---------- equipment QR / history ----------
+function safeIdPart(s){ return String(s||'').trim().toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,28); }
+function makeEquipmentId(){
+  const basis = [state.customer,state.idno,state.number,state.loler && state.loler.makeserial,state.manufacturer].map(s=>String(s||'').trim().toLowerCase()).filter(Boolean).join('|');
+  const hash = syncHash(basis || (Date.now()+''));
+  return 'KE-EQ-'+hash.toUpperCase();
+}
+function equipmentQrValue(id){ return window.location.origin + window.location.pathname + '#equipment='+encodeURIComponent(id); }
+function renderEquipmentQr(){
+  const box=document.getElementById('equipmentQr'); if(!box) return;
+  box.innerHTML='';
+  if(!state.equipmentId){ box.innerHTML='<span class="note-inline">Save the equipment/report first.</span>'; return; }
+  if(typeof QRCode==='undefined'){ box.textContent='QR library not loaded.'; return; }
+  new QRCode(box,{text:equipmentQrValue(state.equipmentId),width:136,height:136,colorDark:'#161b22',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+}
+function reportMatchesEquipment(r,id){
+  if(!r) return false;
+  if(r.equipmentId && r.equipmentId===id) return true;
+  // Legacy reports made before the QR upgrade can still be found by their equipment details.
+  return id && makeLegacyEquipmentId(r)===id;
+}
+function makeLegacyEquipmentId(r){
+  const basis=[r.customer,r.idno,r.number,r.loler&&r.loler.makeserial,r.manufacturer].map(s=>String(s||'').trim().toLowerCase()).filter(Boolean).join('|');
+  return basis ? 'KE-EQ-'+syncHash(basis).toUpperCase() : '';
+}
+function getEquipmentReports(id){
+  const idx=storeGet('report_index')||[]; const out=[];
+  idx.forEach(e=>{const r=storeGet('report_'+e.id);if(r&&reportMatchesEquipment(r,id))out.push(r);});
+  return out.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+}
+function renderEquipmentHistory(){
+  const el=document.getElementById('equipmentHistory'); if(!el) return;
+  if(!state.equipmentId){el.innerHTML='<p class="note-inline">Save this equipment to see its service and LOLER history here.</p>';return;}
+  const reports=getEquipmentReports(state.equipmentId);
+  if(!reports.length){el.innerHTML='<p class="note-inline">No previous reports found for this equipment yet.</p>';return;}
+  el.innerHTML='<div style="font-weight:800;font-size:13px;margin-bottom:2px;">Equipment history — '+reports.length+' report'+(reports.length===1?'':'s')+'</div>'+reports.map(r=>{
+    const isL=r.visitType==='LOLER'; const findings=Object.values(r.items||{}).filter(i=>i&&(i.status==='URGENT'||i.status==='ATTN')).length;
+    return `<div class="equipment-history-card ${isL?'loler':''}"><div class="eh-title">${isL?'📋 LOLER':'🔧 '+(r.visitType||'Service')} — ${formatDateUK(r.date)}</div><div class="eh-meta">${r.reportNo||'No reference'} · ${r.engineer||'No engineer'}${isL&&r.loler&&r.loler.nextexam?' · Next: '+formatDateUK(r.loler.nextexam):''}${findings?' · '+findings+' repair item'+(findings===1?'':'s'):''}</div></div>`;
+  }).join('');
+}
+function startFromEquipment(id){
+  const reports=getEquipmentReports(id); const latest=reports[0];
+  if(latest){
+    const keepEngineer=state.engineer;
+    state=JSON.parse(JSON.stringify(latest)); state._reportId=''; state.reportNo=''; state.engineer=keepEngineer||state.engineer; state.date=new Date().toISOString().slice(0,10);
+    state.visitType='LOLER';
+    state.loler=state.loler||{}; state.loler.prevexam=latest.date||state.loler.prevexam||''; state.loler.nextexam=''; state.loler.signature=null;
+    applyState(state);
+    setStatusMsg('Previous equipment record loaded. Start the new LOLER examination and save it as a new report.', 'ok');
+  } else { state.equipmentId=id; renderEquipmentQr(); renderEquipmentHistory(); }
+}
+function handleEquipmentHash(){
+  const m=String(location.hash||'').match(/^#equipment=(.+)$/); if(!m) return;
+  const id=decodeURIComponent(m[1]);
+  if(!id) return;
+  if(state.customer && !confirm('Open equipment '+id+' from its QR code? Unsaved work will be replaced.')) return;
+  startFromEquipment(id);
+}
+window.addEventListener('hashchange',handleEquipmentHash);
+
+document.getElementById('btnGenerateQr').addEventListener('click',()=>{
+  if(!state.equipmentId){ state.equipmentId=makeEquipmentId(); document.getElementById('f_equipmentId').value=state.equipmentId; }
+  renderEquipmentQr(); setStatusMsg('Equipment QR generated. Save the report so the equipment ID is stored.', 'ok');
+});
+document.getElementById('btnPrintQr').addEventListener('click',()=>{
+  if(!state.equipmentId){setStatusMsg('Save or generate an equipment ID first.','err');return;}
+  const w=window.open('','_blank'); if(!w){setStatusMsg('Pop-up blocked — allow pop-ups to print the QR label.','err');return;}
+  const title=`${state.customer||'Key Engineering'} — ${state.number||state.idno||state.equipmentId}`;
+  w.document.write(`<html><head><title>Equipment QR</title><style>body{font-family:Arial;text-align:center;padding:25px}img{width:220px}h2{margin:8px}p{margin:5px}</style></head><body><h2>KEY ENGINEERING</h2><p>${title}</p><p>${state.equipmentId}</p><div id="q"></div><p>Scan for equipment history</p><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>new QRCode(document.getElementById('q'),{text:${JSON.stringify(equipmentQrValue(state.equipmentId))},width:220,height:220});setTimeout(()=>print(),500)<\/script></body></html>`);w.document.close();
+});
+let qrScanner=null;
+document.getElementById('btnScanQr').addEventListener('click',async()=>{
+  const modal=document.getElementById('qrModal'); modal.classList.add('open');
+  if(typeof Html5Qrcode==='undefined'){document.getElementById('qrScanStatus').textContent='Camera scanner library did not load. You can still use the QR link by opening it in Safari.';return;}
+  try{
+    qrScanner=new Html5Qrcode('qrReader');
+    const cams=await Html5Qrcode.getCameras();
+    const cam=(cams&&cams[0]&&cams[0].id)||null;
+    await qrScanner.start(cam||{facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},text=>{
+      document.getElementById('qrScanStatus').textContent='QR recognised.';
+      try{qrScanner.stop().then(()=>{qrScanner.clear();qrScanner=null;modal.classList.remove('open'); location.href=text;}).catch(()=>{modal.classList.remove('open');location.href=text;});}catch(e){modal.classList.remove('open');location.href=text;}
+    },()=>{});
+  }catch(e){document.getElementById('qrScanStatus').textContent='Could not start the camera: '+e.message;}
+});
+document.getElementById('btnCloseQr').addEventListener('click',async()=>{try{if(qrScanner){await qrScanner.stop();qrScanner.clear();qrScanner=null;}}catch(e){}document.getElementById('qrModal').classList.remove('open');});
+
+// ---------- customer read-only OneDrive portal ----------
+function portalEscape(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function portalReportHtml(r,pdfUrl){
+  const findings=Object.values(r.items||{}).filter(i=>i&&(i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR'));
+  const findingsHtml=findings.length ? findings.map(i=>`<li><b>${portalEscape(i.status)}</b> — ${portalEscape(i.group)} — ${portalEscape(i.label)}${i.note?' — '+portalEscape(i.note):''}</li>`).join('') : '<li>No repair/attention items recorded.</li>';
+  const lol=r.loler||{};
+  return `<article class="report"><div class="report-head"><b>${portalEscape(r.reportNo||'Report')}</b><span>${portalEscape(r.visitType||'Service')} · ${portalEscape(formatDateUK(r.date))}</span></div><div class="grid"><div><b>Engineer</b><br>${portalEscape(r.engineer||'—')}</div><div><b>Equipment</b><br>${portalEscape(r.manufacturer||'')} ${portalEscape(r.number||r.idno||'')}</div>${r.visitType==='LOLER'?`<div><b>SWL</b><br>${portalEscape(lol.swl||r.wll||'—')}</div><div><b>Next examination</b><br>${portalEscape(formatDateUK(lol.nextexam)||'—')}</div><div class="full"><b>Location</b><br>${portalEscape(lol.location||'—')}</div>`:''}</div><h3>Findings</h3><ul>${findingsHtml}</ul>${r.notes?`<h3>Notes</h3><p>${portalEscape(r.notes).replace(/\n/g,'<br>')}</p>`:''}${pdfUrl?`<p><a class="pdf" href="${portalEscape(pdfUrl)}" target="_blank" rel="noopener">📄 View / download PDF report</a></p>`:''}</article>`;
+}
+function buildCustomerPortalHtml(customer,reports,pdfLinks){
+  const generated=new Date().toLocaleString('en-GB');
+  const body=reports.map((r,i)=>portalReportHtml(r,pdfLinks[i]||'')).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Key Engineering — ${portalEscape(customer)} Reports</title><style>body{font-family:Arial,sans-serif;background:#eef1f4;color:#1a2027;margin:0}.wrap{max-width:900px;margin:auto;padding:20px}.head{background:#161b22;color:#fff;border-radius:12px;padding:20px;margin-bottom:16px}.brand{color:#f5b800;font-weight:800;letter-spacing:.08em}.head h1{margin:6px 0;font-size:24px}.muted{color:#aeb8c2;font-size:12px}.report{background:#fff;border:1px solid #d7dce2;border-radius:10px;padding:15px;margin-bottom:12px}.report-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:2px solid #f5b800;padding-bottom:8px;margin-bottom:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px}.full{grid-column:1/-1}.report h3{font-size:13px;text-transform:uppercase;border-bottom:1px solid #ddd;padding-bottom:5px}.report li{margin:5px 0;font-size:13px}.pdf{display:inline-block;background:#f5b800;color:#161b22;padding:9px 12px;border-radius:7px;text-decoration:none;font-weight:700}.foot{font-size:11px;color:#6b7480;text-align:center;margin-top:18px}@media(max-width:600px){.grid{grid-template-columns:1fr}}</style></head><body><div class="wrap"><header class="head"><div class="brand">KEY ENGINEERING</div><h1>${portalEscape(customer)}</h1><div class="muted">Read-only customer report portal · Generated ${portalEscape(generated)}</div></header>${body||'<div class="report">No reports available.</div>'}<div class="foot">Key Engineering (Chesterfield) Ltd · This portal is read-only.</div></div></body></html>`;
+}
+async function syncEnsureSubfolder(parent,name){
+  const path=`/drives/${parent.driveId}/items/${parent.itemId}:/${encodeURIComponent(name)}:/children?$select=id,name,folder`;
+  const res=await syncGraph(path);
+  if(res.ok){const j=await res.json(); if(j.id) return {driveId:parent.driveId,itemId:j.id};}
+  const res2=await syncGraph(`/drives/${parent.driveId}/items/${parent.itemId}/children`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,folder:{},'@microsoft.graph.conflictBehavior':'fail'})});
+  if(!res2.ok && res2.status!==409) throw await syncFail(res2,'Creating customer portal folder');
+  if(res2.ok){const j=await res2.json();return {driveId:parent.driveId,itemId:j.id};}
+  const again=await syncGraph(path); if(!again.ok) throw await syncFail(again,'Opening customer portal folder'); const aj=await again.json(); if(!aj.id) throw new Error('Could not create the customer portal folder.'); return {driveId:parent.driveId,itemId:aj.id};
+}
+async function syncPutInFolder(folder,name,body,type){
+  const path=`/drives/${folder.driveId}/items/${folder.itemId}:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`;
+  const res=await syncGraph(path,{method:'PUT',headers:{'Content-Type':type},body});
+  if(!res.ok) throw await syncFail(res,'Uploading customer portal');
+  return await res.json();
+}
+async function syncCreateViewLink(folder,itemId){
+  const res=await syncGraph(`/drives/${folder.driveId}/items/${itemId}/createLink`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'view',scope:'anonymous'})});
+  if(!res.ok) throw await syncFail(res,'Creating customer view link');
+  const j=await res.json(); return j.link&&j.link.webUrl;
+}
+async function syncCreatePdfShare(folder,itemId){
+  try{return await syncCreateViewLink(folder,itemId);}catch(e){return '';}
+}
+async function createCustomerPortal(){
+  if(!state.customer){setStatusMsg('Select or enter a customer first.','err');return;}
+  if(!syncReady()){setStatusMsg('Sign in to OneDrive first — the customer portal is stored in your shared OneDrive.','err');return;}
+  const btn=document.getElementById('btnCustomerPortal'); btn.disabled=true; btn.textContent='Creating portal…';
+  const result=document.getElementById('portalResult'); result.style.display='block'; result.innerHTML='';
+  const original=JSON.parse(JSON.stringify(state));
+  try{
+    const folder=await syncResolveFolder();
+    const portalFolder=await syncEnsureSubfolder(folder,'Customer Portals');
+    const idx=storeGet('report_index')||[];
+    const reports=[];
+    for(const e of idx){const r=storeGet('report_'+e.id);if(r&&(r.customer||'').trim().toLowerCase()===state.customer.trim().toLowerCase())reports.push(r);}
+    reports.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+    const pdfLinks=[];
+    const pdfFolder=await syncEnsureSubfolder(folder,'Report PDFs');
+    for(const r of reports){
+      try{
+        state=JSON.parse(JSON.stringify(r));
+        const pdf=(r.visitType==='LOLER')?await buildLolerPdfBlob():await buildPdfBlob();
+        const filename=(r.visitType==='LOLER'?lolerFilename():reportFilename()).replace(/[^a-zA-Z0-9._-]/g,'_');
+        const uploaded=await syncPutInFolder(pdfFolder,filename,pdf.output('blob'),'application/pdf');
+        pdfLinks.push(await syncCreatePdfShare(pdfFolder,uploaded.id));
+      }catch(e){pdfLinks.push('');}
+    }
+    state=original;
+    applyState(state);
+    const html=buildCustomerPortalHtml(state.customer,reports,pdfLinks);
+    const safeCustomer=state.customer.replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,50)||'customer';
+    const filename=`${safeCustomer}_customer_portal.html`;
+    const uploaded=await syncPutInFolder(portalFolder,filename,html,'text/html');
+    const link=await syncCreateViewLink(portalFolder,uploaded.id);
+    if(!link) throw new Error('OneDrive did not return a customer view link. Your Microsoft tenant may have anonymous sharing disabled.');
+    result.innerHTML=`<div style="font-weight:800;margin-bottom:6px;">Customer portal ready</div><div class="portal-link">${portalEscape(link)}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="btn-ghost" id="portalCopy" type="button">📋 Copy link</button><a class="btn-ghost" style="text-decoration:none;display:inline-block;" href="${portalEscape(link)}" target="_blank" rel="noopener">Open portal</a></div>`;
+    document.getElementById('portalCopy').addEventListener('click',async()=>{await navigator.clipboard.writeText(link);setStatusMsg('Customer portal link copied.','ok');});
+    setStatusMsg('Read-only customer portal created/updated in OneDrive.','ok');
+  }catch(e){
+    state=original; applyState(state); result.innerHTML='<div style="color:var(--urgent);font-weight:600;">Could not create portal: '+portalEscape(e.message)+'</div>';
+    setStatusMsg('Customer portal failed: '+e.message,'err');
+  }finally{btn.disabled=false;btn.textContent='🔗 Create / update customer portal';}
+}
+document.getElementById('btnCustomerPortal').addEventListener('click',createCustomerPortal);
+
 // ---------- save report ----------
 async function saveReport(){
   if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
   try{
     const reportId=state._reportId||Date.now().toString();
+    if(!state.equipmentId){ state.equipmentId = makeEquipmentId(); document.getElementById('f_equipmentId').value = state.equipmentId; renderEquipmentQr(); }
     if(!state.reportNo){const y=(state.date||new Date().toISOString().slice(0,10)).slice(0,4);const n=Number(storeGet('report_sequence_'+y)||0)+1;storeSet('report_sequence_'+y,n);state.reportNo=`KE-${y}-${String(n).padStart(4,'0')}`;}
     state._reportId=reportId; storeSet('report_'+reportId,state);
     let idx=await loadReportIndex(); const entry={id:reportId,reportNo:state.reportNo,customer:state.customer,idno:state.idno,date:state.date,visitType:state.visitType,engineer:state.engineer};
     const at=idx.findIndex(x=>x.id===reportId); if(at>=0) idx[at]=entry; else idx.push(entry); storeSet('report_index',idx);
     await refreshHistorySelect(); await checkUpcomingLolerReminders(); try{wkRender();}catch(e){} try{syncAfterSave({id:reportId,r:state});}catch(e){}
-    document.getElementById('f_reportNo').value=state.reportNo; updateTopbarSub(); if(typeof updateDashboard==='function') updateDashboard();
+    document.getElementById('f_reportNo').value=state.reportNo; updateTopbarSub(); if(typeof updateDashboard==='function') updateDashboard(); renderEquipmentHistory();
     // The report is safely stored now, so the recoverable draft can be removed.
     clearDraft();
     return true;
@@ -1265,7 +1492,7 @@ function freshState(keepEngineer){
     items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
   });
   return {
-    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'',
+    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'', equipmentId:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
     visitType:'Service', notes:'',
@@ -1487,6 +1714,17 @@ function equipmentTypeLabel(type){
   }
 }
 
+async function makeQrDataUrl(text,size=96){
+  if(typeof QRCode==='undefined') return '';
+  const holder=document.createElement('div'); holder.style.position='fixed'; holder.style.left='-10000px'; holder.style.top='-10000px'; document.body.appendChild(holder);
+  try{
+    new QRCode(holder,{text,width:size,height:size,colorDark:'#161b22',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+    await new Promise(r=>setTimeout(r,20));
+    const canvas=holder.querySelector('canvas');
+    return canvas ? canvas.toDataURL('image/png') : '';
+  }finally{holder.remove();}
+}
+
 function lolerFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
   const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
@@ -1527,6 +1765,12 @@ async function buildLolerPdfBlob(){
   doc.setFillColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]); doc.rect(margin, y, tableW*0.68, 3.2, 'F');
   doc.setFillColor(BRAND_ORANGE[0],BRAND_ORANGE[1],BRAND_ORANGE[2]); doc.rect(margin+tableW*0.68, y, tableW*0.32, 3.2, 'F');
   y += 18;
+  // Put the permanent equipment QR on every LOLER certificate so the next engineer can scan it.
+  try{
+    if(!state.equipmentId){ state.equipmentId = makeEquipmentId(); document.getElementById('f_equipmentId').value = state.equipmentId; }
+    const qrData = await makeQrDataUrl(equipmentQrValue(state.equipmentId), 72);
+    if(qrData){ doc.addImage(qrData,'PNG',pageW-margin-72,margin,72,72); doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(80,85,92); doc.text(state.equipmentId,pageW-margin-72,margin+80,{align:'left'}); }
+  }catch(e){}
 
   // ---- table drawing helpers ----
   function rowBox(height, fill){

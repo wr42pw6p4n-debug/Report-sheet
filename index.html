@@ -13,9 +13,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <style>
   :root{
     --steel-900:#161b22;
@@ -269,22 +269,6 @@
     .report-title{font-size:28px;}
   }
 
-
-  /* Equipment QR / customer portal */
-  .qr-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border:1px solid var(--line);border-radius:9px;background:var(--steel-50);}
-  .qr-preview{width:150px;height:150px;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;padding:6px;}
-  .qr-preview canvas,.qr-preview img{max-width:100%;height:auto;}
-  .equipment-history{display:grid;gap:8px;margin-top:10px;}
-  .equipment-history-card{border:1px solid var(--line);border-left:5px solid var(--steel-700);border-radius:8px;padding:10px;background:#fff;}
-  .equipment-history-card.loler{border-left-color:var(--serv);}
-  .equipment-history-card .eh-title{font-weight:800;font-size:13.5px;}
-  .equipment-history-card .eh-meta{font-size:12px;color:var(--ink-soft);margin-top:3px;}
-  .qr-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100;display:none;align-items:center;justify-content:center;padding:18px;}
-  .qr-modal.open{display:flex;}
-  .qr-modal-inner{width:min(520px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;padding:16px;}
-  #qrReader{width:100%;border-radius:8px;overflow:hidden;background:#111;}
-  .portal-link{word-break:break-all;font-size:12px;padding:9px;background:#f7f8fa;border:1px solid var(--line);border-radius:7px;}
-
   /* print */
   @media print{
     .action-bar, .no-print{display:none !important;}
@@ -292,7 +276,6 @@
     .section{border:1px solid #999; break-inside:avoid; margin:8px 0;}
     .topbar::after{display:none;}
   }
-@media(max-width:560px){#dashStats{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}}
 </style>
 </head>
 <body>
@@ -314,7 +297,6 @@
     <h1 class="report-title">Crane Service Report</h1>
     <p class="report-sub" id="topbarSub">New report — not yet saved</p>
   </div>
-  <div class="section no-print" id="quickDashboard"><div class="section-head"><div class="section-tag" style="background:var(--serv);"></div><h2>Quick Dashboard</h2></div><div class="section-body"><div id="dashStats" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"><button class="btn-ghost" id="dashNew" type="button">➕ New report</button><button class="btn-ghost" id="dashRepairs" type="button">🔧 Repairs outstanding</button><button class="btn-ghost" id="dashHistory" type="button">📁 Previous reports</button><button class="btn-ghost" id="dashLoler" type="button">⏰ LOLER due</button></div></div></div>
 
   <!-- TEAM SYNC (OneDrive) -->
   <div class="section no-print">
@@ -331,11 +313,25 @@
     </div>
   </div>
 
+  <!-- SCAN PREVIOUS REPORT -->
+  <div class="section no-print">
+    <div class="section-head"><div class="section-tag"></div><h2>📷 Scan Previous Report</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Scan the QR code printed on a previous report for this equipment to look it up and start a new one from it.</p>
+      <button class="btn-ghost" id="btnStartScan" type="button">📷 Start Scan</button>
+      <div id="scannerWrap" style="display:none; margin-top:12px;">
+        <video id="scannerVideo" style="width:100%; border-radius:8px; background:#000; display:block;" playsinline muted></video>
+        <button class="btn-ghost" id="btnStopScan" type="button" style="margin-top:8px;">Cancel</button>
+      </div>
+      <div id="scanResult" style="display:none; margin-top:12px;"></div>
+    </div>
+  </div>
+
   <!-- COMPANY / JOB DETAILS -->
   <div class="section">
     <div class="section-head"><div class="section-tag"></div><h2>Customer &amp; Job Details</h2></div>
     <div class="section-body">
-      <div class="company-row"><div class="field"><label for="companySearch">🔎 Find customer</label><input type="search" id="companySearch" placeholder="Start typing a customer name…" autocomplete="off"></div>
+      <div class="company-row">
         <div class="field">
           <label for="companySelect">Company on file</label>
           <select id="companySelect"><option value="">— Select a saved company —</option></select>
@@ -351,9 +347,10 @@
         <div class="field"><label>Crane number</label><input type="text" id="f_number"></div>
         <div class="field"><label>Hoist WLL</label><input type="text" id="f_wll"></div>
         <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
-        <div class="field"><label>Customer email</label><input type="email" id="f_email"></div><div class="field"><label>Report reference</label><input type="text" id="f_reportNo" readonly placeholder="Generated when saved"></div>
+        <div class="field"><label>Customer email</label><input type="email" id="f_email"></div>
+        <div class="field"><label>Customer portal PIN</label><input type="text" id="f_customerpin" inputmode="numeric" maxlength="6" placeholder="4\u20136 digits"></div>
         <div class="field"><label>Date</label><input type="date" id="f_date"></div>
-        <div class="field"><label>Engineer</label><input type="text" id="f_engineer" list="engineerList" placeholder="Your name"><datalist id="engineerList"><option value="Dave"><option value="Jono"><option value="Ricky"><option value="Jordan"><option value="Martyn"><option value="Ashleigh"></datalist></div>
+        <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
         <div class="field">
           <label>Type of visit</label>
           <div class="visit-toggle" id="visitTypeToggle">
@@ -431,26 +428,6 @@
     </div>
   </div>
 
-  <!-- EQUIPMENT ID / QR -->
-  <div class="section no-print" id="equipmentQrCard">
-    <div class="section-head"><div class="section-tag" style="background:var(--na);"></div><h2>Equipment QR &amp; History</h2></div>
-    <div class="section-body">
-      <div class="qr-box">
-        <div id="equipmentQr" class="qr-preview"><span class="note-inline">QR appears when equipment is saved.</span></div>
-        <div style="flex:1;min-width:220px;">
-          <div class="field"><label>Permanent Equipment ID</label><input id="f_equipmentId" type="text" readonly placeholder="Generated when saved"></div>
-          <p class="note-inline">This ID belongs to the crane/equipment, not just this report. Print the QR on the LOLER certificate or a label and keep it with the equipment.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn-ghost" id="btnGenerateQr" type="button">🔲 Generate QR</button>
-            <button class="btn-ghost" id="btnPrintQr" type="button">🖨️ Print QR label</button>
-            <button class="btn-ghost" id="btnScanQr" type="button">📷 Scan QR</button>
-          </div>
-        </div>
-      </div>
-      <div id="equipmentHistory" class="equipment-history"></div>
-    </div>
-  </div>
-
   <!-- NOTES -->
   <div class="section">
     <div class="section-head"><div class="section-tag"></div><h2>General Notes</h2></div>
@@ -467,16 +444,6 @@
       <div id="reminderList"></div>
       <div class="field full" style="margin-top:10px;"><label>Your email (for the reminder button below)</label><input type="email" id="reminderEmail"></div>
       <button class="btn-ghost" id="btnEmailReminders" type="button">✉️ Email me this list</button>
-    </div>
-  </div>
-
-  <!-- CUSTOMER PORTAL -->
-  <div class="section no-print" id="customerPortalCard">
-    <div class="section-head"><div class="section-tag" style="background:var(--serv);"></div><h2>Customer Read-Only Portal</h2></div>
-    <div class="section-body">
-      <p class="note-inline" style="margin-top:-4px;">Create a private, read-only customer portal in your shared OneDrive. The customer gets a view-only link to their reports; they cannot edit the reports through the portal.</p>
-      <button class="btn-ghost" id="btnCustomerPortal" type="button">🔗 Create / update customer portal</button>
-      <div id="portalResult" style="display:none;margin-top:10px;"></div>
     </div>
   </div>
 
@@ -525,7 +492,7 @@
 
       <details class="wk-more">
         <summary>Combine reports from other phones</summary>
-        <p class="note-inline">With OneDrive sync switched on (top of the page) reports arrive on their own. Otherwise, they're saved on the phone they were written on: on each engineer's phone, open this section, pick the week and tap Export, then send the file over. On this device, tap Add reports and choose the file(s) — they're merged into the list above.</p>
+        <p class="note-inline">With OneDrive sync switched on (top of the page) reports arrive on their own. Otherwise, they're saved on the phone they were written on: on each engineer's phone, open this section, pick the week and tap Export, then send the file over. On this device, tap Add reports and choose the file(s) — the full reports are merged in (they'll show up in Saved Reports too, not just the list below), minus photos and signatures to keep the file small.</p>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
           <button class="btn-ghost" id="wkExport" type="button">📤 Export this week's reports</button>
           <button class="btn-ghost" id="wkImportBtn" type="button">📥 Add reports…</button>
@@ -538,17 +505,6 @@
   </div>
 
   <div style="height:6px;"></div>
-</div>
-
-<div class="qr-modal" id="qrModal">
-  <div class="qr-modal-inner">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
-      <h2 style="margin:0;font-family:Oswald,sans-serif;">Scan Equipment QR</h2>
-      <button class="btn-ghost" id="btnCloseQr" type="button">✕ Close</button>
-    </div>
-    <div id="qrReader"></div>
-    <p class="note-inline" id="qrScanStatus">Point the camera at a Key Engineering equipment QR code.</p>
-  </div>
 </div>
 
 <div class="action-bar no-print">
@@ -693,7 +649,7 @@ let ITEM_IDS = [];
 
 // ---------- state ----------
 let state = {
-  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'', equipmentId:'',
+  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
@@ -917,7 +873,7 @@ renderFindings();
 
 // ---------- field bindings ----------
 const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
-  f_wll:'wll', f_falls:'falls', f_email:'email', f_reportNo:'reportNo', f_date:'date', f_engineer:'engineer'};
+  f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer'};
 Object.entries(fieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
   el.value = state[key];
@@ -1103,6 +1059,9 @@ function storeSet(key, value){
   try{ localStorage.setItem('crane_report_'+key, JSON.stringify(value)); return true; }
   catch(e){ throw new Error('Browser storage unavailable ('+e.message+'). Make sure you opened this file directly in a browser tab, not an in-app preview.'); }
 }
+function storeDelete(key){
+  try{ localStorage.removeItem('crane_report_'+key); }catch(e){}
+}
 
 // ---------- companies (persistent, this browser) ----------
 const companySelect = document.getElementById('companySelect');
@@ -1128,18 +1087,17 @@ companySelect.addEventListener('change', ()=>{
   if(!c) return;
   // only the customer's own details carry over — everything crane-specific
   // starts blank since the same customer can have several different cranes
-  state.customer=c.customer||''; state.email=c.email||'';
-  // Keep the engineer who is completing the report; selecting a customer should
-  // never unexpectedly clear the person doing the inspection.
-  state.manufacturer=''; state.idno=''; state.number=''; state.wll=''; state.falls='';
+  state.customer=c.customer||''; state.email=c.email||''; state.customerpin=c.customerpin||'';
+  state.manufacturer=''; state.idno=''; state.number=''; state.wll=''; state.falls=''; state.engineer='';
   document.getElementById('f_customer').value=state.customer;
   document.getElementById('f_email').value=state.email;
+  document.getElementById('f_customerpin').value=state.customerpin;
   document.getElementById('f_manufacturer').value='';
   document.getElementById('f_idno').value='';
   document.getElementById('f_number').value='';
   document.getElementById('f_wll').value='';
   document.getElementById('f_falls').value='';
-  document.getElementById('f_engineer').value=state.engineer||'';
+  document.getElementById('f_engineer').value='';
   updateTopbarSub();
 });
 
@@ -1147,11 +1105,16 @@ document.getElementById('saveCompanyBtn').addEventListener('click', async ()=>{
   if(!state.customer){ setStatusMsg('Enter a customer name before saving.', 'err'); return; }
   const newCo = {
     customer: state.customer, manufacturer: state.manufacturer, idno: state.idno,
-    number: state.number, wll: state.wll, falls: state.falls, email: state.email
+    number: state.number, wll: state.wll, falls: state.falls, email: state.email,
+    customerpin: state.customerpin
   };
   const companies = await loadCompanies();
   const existingIndex = companies.findIndex(c => (c.customer||'').trim().toLowerCase() === newCo.customer.trim().toLowerCase());
-  if(existingIndex > -1){ companies[existingIndex] = newCo; } else { companies.push(newCo); }
+  if(existingIndex > -1){
+    // keep the existing PIN if this save didn't type a new one, rather than blanking it out
+    if(!newCo.customerpin) newCo.customerpin = companies[existingIndex].customerpin || '';
+    companies[existingIndex] = newCo;
+  } else { companies.push(newCo); }
   try{
     storeSet('companies', companies);
     companiesCache = await refreshCompanySelect();
@@ -1172,7 +1135,7 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.reportNo || 'No ref'} · ${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
     historySelect.appendChild(o);
   });
 }
@@ -1258,9 +1221,6 @@ function applyState(loaded){
   if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'};
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
-  document.getElementById('f_equipmentId').value = state.equipmentId || '';
-  renderEquipmentQr();
-  renderEquipmentHistory();
   Object.entries(lolerFieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state.loler[key]||'');
   setEquipmentType(state.loler.equipmentType, {restoring:true});
   setVisitType(state.visitType || 'Service');
@@ -1298,186 +1258,21 @@ function setStatusMsg(msg, type){
   statusTimer = setTimeout(()=>{ el.textContent=''; el.className='status-msg no-print'; }, 6000);
 }
 
-// ---------- equipment QR / history ----------
-function safeIdPart(s){ return String(s||'').trim().toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,28); }
-function makeEquipmentId(){
-  const basis = [state.customer,state.idno,state.number,state.loler && state.loler.makeserial,state.manufacturer].map(s=>String(s||'').trim().toLowerCase()).filter(Boolean).join('|');
-  const hash = syncHash(basis || (Date.now()+''));
-  return 'KE-EQ-'+hash.toUpperCase();
-}
-function equipmentQrValue(id){ return window.location.origin + window.location.pathname + '#equipment='+encodeURIComponent(id); }
-function renderEquipmentQr(){
-  const box=document.getElementById('equipmentQr'); if(!box) return;
-  box.innerHTML='';
-  if(!state.equipmentId){ box.innerHTML='<span class="note-inline">Save the equipment/report first.</span>'; return; }
-  if(typeof QRCode==='undefined'){ box.textContent='QR library not loaded.'; return; }
-  new QRCode(box,{text:equipmentQrValue(state.equipmentId),width:136,height:136,colorDark:'#161b22',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
-}
-function reportMatchesEquipment(r,id){
-  if(!r) return false;
-  if(r.equipmentId && r.equipmentId===id) return true;
-  // Legacy reports made before the QR upgrade can still be found by their equipment details.
-  return id && makeLegacyEquipmentId(r)===id;
-}
-function makeLegacyEquipmentId(r){
-  const basis=[r.customer,r.idno,r.number,r.loler&&r.loler.makeserial,r.manufacturer].map(s=>String(s||'').trim().toLowerCase()).filter(Boolean).join('|');
-  return basis ? 'KE-EQ-'+syncHash(basis).toUpperCase() : '';
-}
-function getEquipmentReports(id){
-  const idx=storeGet('report_index')||[]; const out=[];
-  idx.forEach(e=>{const r=storeGet('report_'+e.id);if(r&&reportMatchesEquipment(r,id))out.push(r);});
-  return out.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-}
-function renderEquipmentHistory(){
-  const el=document.getElementById('equipmentHistory'); if(!el) return;
-  if(!state.equipmentId){el.innerHTML='<p class="note-inline">Save this equipment to see its service and LOLER history here.</p>';return;}
-  const reports=getEquipmentReports(state.equipmentId);
-  if(!reports.length){el.innerHTML='<p class="note-inline">No previous reports found for this equipment yet.</p>';return;}
-  el.innerHTML='<div style="font-weight:800;font-size:13px;margin-bottom:2px;">Equipment history — '+reports.length+' report'+(reports.length===1?'':'s')+'</div>'+reports.map(r=>{
-    const isL=r.visitType==='LOLER'; const findings=Object.values(r.items||{}).filter(i=>i&&(i.status==='URGENT'||i.status==='ATTN')).length;
-    return `<div class="equipment-history-card ${isL?'loler':''}"><div class="eh-title">${isL?'📋 LOLER':'🔧 '+(r.visitType||'Service')} — ${formatDateUK(r.date)}</div><div class="eh-meta">${r.reportNo||'No reference'} · ${r.engineer||'No engineer'}${isL&&r.loler&&r.loler.nextexam?' · Next: '+formatDateUK(r.loler.nextexam):''}${findings?' · '+findings+' repair item'+(findings===1?'':'s'):''}</div></div>`;
-  }).join('');
-}
-function startFromEquipment(id){
-  const reports=getEquipmentReports(id); const latest=reports[0];
-  if(latest){
-    const keepEngineer=state.engineer;
-    state=JSON.parse(JSON.stringify(latest)); state._reportId=''; state.reportNo=''; state.engineer=keepEngineer||state.engineer; state.date=new Date().toISOString().slice(0,10);
-    state.visitType='LOLER';
-    state.loler=state.loler||{}; state.loler.prevexam=latest.date||state.loler.prevexam||''; state.loler.nextexam=''; state.loler.signature=null;
-    applyState(state);
-    setStatusMsg('Previous equipment record loaded. Start the new LOLER examination and save it as a new report.', 'ok');
-  } else { state.equipmentId=id; renderEquipmentQr(); renderEquipmentHistory(); }
-}
-function handleEquipmentHash(){
-  const m=String(location.hash||'').match(/^#equipment=(.+)$/); if(!m) return;
-  const id=decodeURIComponent(m[1]);
-  if(!id) return;
-  if(state.customer && !confirm('Open equipment '+id+' from its QR code? Unsaved work will be replaced.')) return;
-  startFromEquipment(id);
-}
-window.addEventListener('hashchange',handleEquipmentHash);
-
-document.getElementById('btnGenerateQr').addEventListener('click',()=>{
-  if(!state.equipmentId){ state.equipmentId=makeEquipmentId(); document.getElementById('f_equipmentId').value=state.equipmentId; }
-  renderEquipmentQr(); setStatusMsg('Equipment QR generated. Save the report so the equipment ID is stored.', 'ok');
-});
-document.getElementById('btnPrintQr').addEventListener('click',()=>{
-  if(!state.equipmentId){setStatusMsg('Save or generate an equipment ID first.','err');return;}
-  const w=window.open('','_blank'); if(!w){setStatusMsg('Pop-up blocked — allow pop-ups to print the QR label.','err');return;}
-  const title=`${state.customer||'Key Engineering'} — ${state.number||state.idno||state.equipmentId}`;
-  w.document.write(`<html><head><title>Equipment QR</title><style>body{font-family:Arial;text-align:center;padding:25px}img{width:220px}h2{margin:8px}p{margin:5px}</style></head><body><h2>KEY ENGINEERING</h2><p>${title}</p><p>${state.equipmentId}</p><div id="q"></div><p>Scan for equipment history</p><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script><script>new QRCode(document.getElementById('q'),{text:${JSON.stringify(equipmentQrValue(state.equipmentId))},width:220,height:220});setTimeout(()=>print(),500)<\/script></body></html>`);w.document.close();
-});
-let qrScanner=null;
-document.getElementById('btnScanQr').addEventListener('click',async()=>{
-  const modal=document.getElementById('qrModal'); modal.classList.add('open');
-  if(typeof Html5Qrcode==='undefined'){document.getElementById('qrScanStatus').textContent='Camera scanner library did not load. You can still use the QR link by opening it in Safari.';return;}
-  try{
-    qrScanner=new Html5Qrcode('qrReader');
-    const cams=await Html5Qrcode.getCameras();
-    const cam=(cams&&cams[0]&&cams[0].id)||null;
-    await qrScanner.start(cam||{facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},text=>{
-      document.getElementById('qrScanStatus').textContent='QR recognised.';
-      try{qrScanner.stop().then(()=>{qrScanner.clear();qrScanner=null;modal.classList.remove('open'); location.href=text;}).catch(()=>{modal.classList.remove('open');location.href=text;});}catch(e){modal.classList.remove('open');location.href=text;}
-    },()=>{});
-  }catch(e){document.getElementById('qrScanStatus').textContent='Could not start the camera: '+e.message;}
-});
-document.getElementById('btnCloseQr').addEventListener('click',async()=>{try{if(qrScanner){await qrScanner.stop();qrScanner.clear();qrScanner=null;}}catch(e){}document.getElementById('qrModal').classList.remove('open');});
-
-// ---------- customer read-only OneDrive portal ----------
-function portalEscape(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function portalReportHtml(r,pdfUrl){
-  const findings=Object.values(r.items||{}).filter(i=>i&&(i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR'));
-  const findingsHtml=findings.length ? findings.map(i=>`<li><b>${portalEscape(i.status)}</b> — ${portalEscape(i.group)} — ${portalEscape(i.label)}${i.note?' — '+portalEscape(i.note):''}</li>`).join('') : '<li>No repair/attention items recorded.</li>';
-  const lol=r.loler||{};
-  return `<article class="report"><div class="report-head"><b>${portalEscape(r.reportNo||'Report')}</b><span>${portalEscape(r.visitType||'Service')} · ${portalEscape(formatDateUK(r.date))}</span></div><div class="grid"><div><b>Engineer</b><br>${portalEscape(r.engineer||'—')}</div><div><b>Equipment</b><br>${portalEscape(r.manufacturer||'')} ${portalEscape(r.number||r.idno||'')}</div>${r.visitType==='LOLER'?`<div><b>SWL</b><br>${portalEscape(lol.swl||r.wll||'—')}</div><div><b>Next examination</b><br>${portalEscape(formatDateUK(lol.nextexam)||'—')}</div><div class="full"><b>Location</b><br>${portalEscape(lol.location||'—')}</div>`:''}</div><h3>Findings</h3><ul>${findingsHtml}</ul>${r.notes?`<h3>Notes</h3><p>${portalEscape(r.notes).replace(/\n/g,'<br>')}</p>`:''}${pdfUrl?`<p><a class="pdf" href="${portalEscape(pdfUrl)}" target="_blank" rel="noopener">📄 View / download PDF report</a></p>`:''}</article>`;
-}
-function buildCustomerPortalHtml(customer,reports,pdfLinks){
-  const generated=new Date().toLocaleString('en-GB');
-  const body=reports.map((r,i)=>portalReportHtml(r,pdfLinks[i]||'')).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Key Engineering — ${portalEscape(customer)} Reports</title><style>body{font-family:Arial,sans-serif;background:#eef1f4;color:#1a2027;margin:0}.wrap{max-width:900px;margin:auto;padding:20px}.head{background:#161b22;color:#fff;border-radius:12px;padding:20px;margin-bottom:16px}.brand{color:#f5b800;font-weight:800;letter-spacing:.08em}.head h1{margin:6px 0;font-size:24px}.muted{color:#aeb8c2;font-size:12px}.report{background:#fff;border:1px solid #d7dce2;border-radius:10px;padding:15px;margin-bottom:12px}.report-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:2px solid #f5b800;padding-bottom:8px;margin-bottom:10px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px}.full{grid-column:1/-1}.report h3{font-size:13px;text-transform:uppercase;border-bottom:1px solid #ddd;padding-bottom:5px}.report li{margin:5px 0;font-size:13px}.pdf{display:inline-block;background:#f5b800;color:#161b22;padding:9px 12px;border-radius:7px;text-decoration:none;font-weight:700}.foot{font-size:11px;color:#6b7480;text-align:center;margin-top:18px}@media(max-width:600px){.grid{grid-template-columns:1fr}}</style></head><body><div class="wrap"><header class="head"><div class="brand">KEY ENGINEERING</div><h1>${portalEscape(customer)}</h1><div class="muted">Read-only customer report portal · Generated ${portalEscape(generated)}</div></header>${body||'<div class="report">No reports available.</div>'}<div class="foot">Key Engineering (Chesterfield) Ltd · This portal is read-only.</div></div></body></html>`;
-}
-async function syncEnsureSubfolder(parent,name){
-  const path=`/drives/${parent.driveId}/items/${parent.itemId}:/${encodeURIComponent(name)}:/children?$select=id,name,folder`;
-  const res=await syncGraph(path);
-  if(res.ok){const j=await res.json(); if(j.id) return {driveId:parent.driveId,itemId:j.id};}
-  const res2=await syncGraph(`/drives/${parent.driveId}/items/${parent.itemId}/children`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,folder:{},'@microsoft.graph.conflictBehavior':'fail'})});
-  if(!res2.ok && res2.status!==409) throw await syncFail(res2,'Creating customer portal folder');
-  if(res2.ok){const j=await res2.json();return {driveId:parent.driveId,itemId:j.id};}
-  const again=await syncGraph(path); if(!again.ok) throw await syncFail(again,'Opening customer portal folder'); const aj=await again.json(); if(!aj.id) throw new Error('Could not create the customer portal folder.'); return {driveId:parent.driveId,itemId:aj.id};
-}
-async function syncPutInFolder(folder,name,body,type){
-  const path=`/drives/${folder.driveId}/items/${folder.itemId}:/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`;
-  const res=await syncGraph(path,{method:'PUT',headers:{'Content-Type':type},body});
-  if(!res.ok) throw await syncFail(res,'Uploading customer portal');
-  return await res.json();
-}
-async function syncCreateViewLink(folder,itemId){
-  const res=await syncGraph(`/drives/${folder.driveId}/items/${itemId}/createLink`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'view',scope:'anonymous'})});
-  if(!res.ok) throw await syncFail(res,'Creating customer view link');
-  const j=await res.json(); return j.link&&j.link.webUrl;
-}
-async function syncCreatePdfShare(folder,itemId){
-  try{return await syncCreateViewLink(folder,itemId);}catch(e){return '';}
-}
-async function createCustomerPortal(){
-  if(!state.customer){setStatusMsg('Select or enter a customer first.','err');return;}
-  if(!syncReady()){setStatusMsg('Sign in to OneDrive first — the customer portal is stored in your shared OneDrive.','err');return;}
-  const btn=document.getElementById('btnCustomerPortal'); btn.disabled=true; btn.textContent='Creating portal…';
-  const result=document.getElementById('portalResult'); result.style.display='block'; result.innerHTML='';
-  const original=JSON.parse(JSON.stringify(state));
-  try{
-    const folder=await syncResolveFolder();
-    const portalFolder=await syncEnsureSubfolder(folder,'Customer Portals');
-    const idx=storeGet('report_index')||[];
-    const reports=[];
-    for(const e of idx){const r=storeGet('report_'+e.id);if(r&&(r.customer||'').trim().toLowerCase()===state.customer.trim().toLowerCase())reports.push(r);}
-    reports.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-    const pdfLinks=[];
-    const pdfFolder=await syncEnsureSubfolder(folder,'Report PDFs');
-    for(const r of reports){
-      try{
-        state=JSON.parse(JSON.stringify(r));
-        const pdf=(r.visitType==='LOLER')?await buildLolerPdfBlob():await buildPdfBlob();
-        const filename=(r.visitType==='LOLER'?lolerFilename():reportFilename()).replace(/[^a-zA-Z0-9._-]/g,'_');
-        const uploaded=await syncPutInFolder(pdfFolder,filename,pdf.output('blob'),'application/pdf');
-        pdfLinks.push(await syncCreatePdfShare(pdfFolder,uploaded.id));
-      }catch(e){pdfLinks.push('');}
-    }
-    state=original;
-    applyState(state);
-    const html=buildCustomerPortalHtml(state.customer,reports,pdfLinks);
-    const safeCustomer=state.customer.replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,50)||'customer';
-    const filename=`${safeCustomer}_customer_portal.html`;
-    const uploaded=await syncPutInFolder(portalFolder,filename,html,'text/html');
-    const link=await syncCreateViewLink(portalFolder,uploaded.id);
-    if(!link) throw new Error('OneDrive did not return a customer view link. Your Microsoft tenant may have anonymous sharing disabled.');
-    result.innerHTML=`<div style="font-weight:800;margin-bottom:6px;">Customer portal ready</div><div class="portal-link">${portalEscape(link)}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button class="btn-ghost" id="portalCopy" type="button">📋 Copy link</button><a class="btn-ghost" style="text-decoration:none;display:inline-block;" href="${portalEscape(link)}" target="_blank" rel="noopener">Open portal</a></div>`;
-    document.getElementById('portalCopy').addEventListener('click',async()=>{await navigator.clipboard.writeText(link);setStatusMsg('Customer portal link copied.','ok');});
-    setStatusMsg('Read-only customer portal created/updated in OneDrive.','ok');
-  }catch(e){
-    state=original; applyState(state); result.innerHTML='<div style="color:var(--urgent);font-weight:600;">Could not create portal: '+portalEscape(e.message)+'</div>';
-    setStatusMsg('Customer portal failed: '+e.message,'err');
-  }finally{btn.disabled=false;btn.textContent='🔗 Create / update customer portal';}
-}
-document.getElementById('btnCustomerPortal').addEventListener('click',createCustomerPortal);
-
 // ---------- save report ----------
 async function saveReport(){
   if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
+  const reportId = Date.now().toString();
   try{
-    const reportId=state._reportId||Date.now().toString();
-    if(!state.equipmentId){ state.equipmentId = makeEquipmentId(); document.getElementById('f_equipmentId').value = state.equipmentId; renderEquipmentQr(); }
-    if(!state.reportNo){const y=(state.date||new Date().toISOString().slice(0,10)).slice(0,4);const n=Number(storeGet('report_sequence_'+y)||0)+1;storeSet('report_sequence_'+y,n);state.reportNo=`KE-${y}-${String(n).padStart(4,'0')}`;}
-    state._reportId=reportId; storeSet('report_'+reportId,state);
-    let idx=await loadReportIndex(); const entry={id:reportId,reportNo:state.reportNo,customer:state.customer,idno:state.idno,date:state.date,visitType:state.visitType,engineer:state.engineer};
-    const at=idx.findIndex(x=>x.id===reportId); if(at>=0) idx[at]=entry; else idx.push(entry); storeSet('report_index',idx);
-    await refreshHistorySelect(); await checkUpcomingLolerReminders(); try{wkRender();}catch(e){} try{syncAfterSave({id:reportId,r:state});}catch(e){}
-    document.getElementById('f_reportNo').value=state.reportNo; updateTopbarSub(); if(typeof updateDashboard==='function') updateDashboard(); renderEquipmentHistory();
-    // The report is safely stored now, so the recoverable draft can be removed.
-    clearDraft();
+    storeSet('report_'+reportId, state);
+    const idx = await loadReportIndex();
+    idx.push({id:reportId, customer:state.customer, idno:state.idno, date:state.date, visitType:state.visitType});
+    storeSet('report_index', idx);
+    await refreshHistorySelect();
+    await checkUpcomingLolerReminders();
+    try{ wkRender(); }catch(e){ /* weekly list is a bonus — never block a save */ }
+    try{ syncAfterSave({id:reportId, r:state}); }catch(e){ /* sync must never block a save */ }
     return true;
-  }catch(e){setStatusMsg('Could not save report: '+e.message,'err');return false;}
+  }catch(e){ setStatusMsg('Could not save report: '+e.message, 'err'); return false; }
 }
 
 document.getElementById('btnSave').addEventListener('click', async ()=>{
@@ -1492,7 +1287,7 @@ function freshState(keepEngineer){
     items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
   });
   return {
-    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', reportNo:'', _reportId:'', equipmentId:'',
+    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
     visitType:'Service', notes:'',
@@ -1500,6 +1295,115 @@ function freshState(keepEngineer){
     items
   };
 }
+
+// ---------- scan previous report (QR) ----------
+let scanStream = null, scanRAF = null;
+const scannerVideo = document.getElementById('scannerVideo');
+const scannerCanvas = document.createElement('canvas');
+
+async function startScan(){
+  const resultBox = document.getElementById('scanResult');
+  resultBox.style.display = 'none'; resultBox.innerHTML = '';
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    setStatusMsg('This browser can\u2019t access the camera for scanning.', 'err'); return;
+  }
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    scannerVideo.srcObject = scanStream;
+    await scannerVideo.play();
+    document.getElementById('scannerWrap').style.display = 'block';
+    scanLoop();
+  }catch(e){
+    setStatusMsg('Could not open the camera: '+e.message, 'err');
+  }
+}
+function stopScan(){
+  if(scanRAF) cancelAnimationFrame(scanRAF);
+  scanRAF = null;
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  document.getElementById('scannerWrap').style.display = 'none';
+}
+function scanLoop(){
+  if(!scanStream) return;
+  const w = scannerVideo.videoWidth, h = scannerVideo.videoHeight;
+  if(w && h && typeof jsQR !== 'undefined'){
+    scannerCanvas.width = w; scannerCanvas.height = h;
+    const ctx = scannerCanvas.getContext('2d');
+    ctx.drawImage(scannerVideo, 0, 0, w, h);
+    const imgData = ctx.getImageData(0,0,w,h);
+    const code = jsQR(imgData.data, w, h);
+    if(code && code.data){
+      stopScan();
+      handleScannedPayload(code.data);
+      return;
+    }
+  }
+  scanRAF = requestAnimationFrame(scanLoop);
+}
+
+// looks through every report saved on this device (loads each in full — the
+// index alone doesn't carry crane number/ID) and keeps the most recent match
+function findMatchingReport(customer, number, idno){
+  let best = null;
+  wkArr(storeGet('report_index')).forEach(e=>{
+    if(!e) return;
+    const full = storeGet('report_'+e.id);
+    if(!full) return;
+    if(String(full.customer||'').trim().toLowerCase() === customer.trim().toLowerCase() &&
+       String(full.number||'').trim().toLowerCase() === (number||'').trim().toLowerCase() &&
+       String(full.idno||'').trim().toLowerCase() === (idno||'').trim().toLowerCase()){
+      if(!best || (full.date||'') > (best.full.date||'')) best = {id:e.id, full};
+    }
+  });
+  return best;
+}
+
+function handleScannedPayload(text){
+  const parts = String(text).split('|');
+  const box = document.getElementById('scanResult');
+  box.style.display = 'block'; box.innerHTML = '';
+  if(parts[0] !== 'KEEQ1'){
+    box.innerHTML = '<p class="finding-empty">That QR code doesn\u2019t look like one of ours.</p>';
+    return;
+  }
+  const customer = parts[1]||'', number = parts[2]||'', idno = parts[3]||'';
+  const match = findMatchingReport(customer, number, idno);
+  if(!match){
+    box.innerHTML = `<p class="finding-empty">No previous report found on this device for ${customer||'that equipment'}${number?' — '+number:''}. If it was written on a different phone, add it via the Weekly Repairs List \u201cAdd reports\u2026\u201d first.</p>`;
+    return;
+  }
+  const r = match.full;
+  const findings = Object.values(r.items||{}).filter(i=> i && (i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR'));
+  const card = document.createElement('div');
+  card.className = 'finding-card';
+  card.style.borderLeftColor = 'var(--na)'; card.style.background = '#eef6fb';
+  card.innerHTML = `<div>
+    <div style="font-weight:700;font-size:14px;">${r.customer||''}${r.number?' — '+r.number:''}</div>
+    <div style="font-size:12.5px;color:var(--ink-soft);">Last visit: ${formatDateUK(r.date)} \u00b7 ${r.visitType||'Service'}${findings.length? ' \u00b7 '+findings.length+' finding(s) flagged' : ''}</div>
+  </div>`;
+  box.appendChild(card);
+  const startBtn = document.createElement('button');
+  startBtn.type = 'button';
+  startBtn.className = 'action-btn yellow';
+  startBtn.style.marginTop = '10px';
+  startBtn.textContent = '✅ Start New Report From This';
+  startBtn.addEventListener('click', ()=> startFromScannedReport(r));
+  box.appendChild(startBtn);
+}
+
+function startFromScannedReport(r){
+  const fresh = freshState(false);
+  fresh.customer = r.customer||''; fresh.manufacturer = r.manufacturer||''; fresh.idno = r.idno||'';
+  fresh.number = r.number||''; fresh.wll = r.wll||''; fresh.falls = r.falls||''; fresh.email = r.email||'';
+  applyState(fresh);
+  companySelect.value = '';
+  document.getElementById('scanResult').style.display = 'none';
+  setStatusMsg('New report started from '+(r.customer||'previous equipment')+'.', 'ok');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+document.getElementById('btnStartScan').addEventListener('click', startScan);
+document.getElementById('btnStopScan').addEventListener('click', stopScan);
 
 document.getElementById('btnComplete').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnComplete');
@@ -1554,6 +1458,30 @@ function statusLabel(key){
   return s ? s.label : 'Not checked';
 }
 
+// ---------- QR code (equipment history) ----------
+// Encodes just enough to look this piece of equipment back up on this device —
+// customer name, crane number, identification no. Nothing sensitive; it's the
+// same information already printed on the report itself.
+function equipmentQrPayload(){
+  return ['KEEQ1', state.customer||'', state.number||'', state.idno||''].join('|');
+}
+function buildQrDataUrl(text){
+  if(typeof QRCode === 'undefined') return null;
+  const holder = document.createElement('div');
+  holder.style.position = 'fixed';
+  holder.style.left = '-9999px';
+  document.body.appendChild(holder);
+  try{
+    new QRCode(holder, {text: text, width:220, height:220, correctLevel: QRCode.CorrectLevel.M});
+    const canvas = holder.querySelector('canvas');
+    return canvas ? canvas.toDataURL('image/png') : null;
+  }catch(e){
+    return null;
+  }finally{
+    document.body.removeChild(holder);
+  }
+}
+
 async function buildPdfBlob(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF('p','pt','a4');
@@ -1578,6 +1506,15 @@ async function buildPdfBlob(){
     doc.setTextColor(255,255,255); doc.setFontSize(17);
     doc.text('Crane Service Report', margin, 48);
   }
+  try{
+    const qrUrl = buildQrDataUrl(equipmentQrPayload());
+    if(qrUrl){
+      const qrSize = 50, qrX = pageW-margin-qrSize, qrY = 11;
+      doc.setFillColor(255,255,255);
+      doc.roundedRect(qrX-4, qrY-4, qrSize+8, qrSize+8, 3, 3, 'F');
+      doc.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    }
+  }catch(e){}
   y = 92;
 
   // info grid (two columns)
@@ -1714,17 +1651,6 @@ function equipmentTypeLabel(type){
   }
 }
 
-async function makeQrDataUrl(text,size=96){
-  if(typeof QRCode==='undefined') return '';
-  const holder=document.createElement('div'); holder.style.position='fixed'; holder.style.left='-10000px'; holder.style.top='-10000px'; document.body.appendChild(holder);
-  try{
-    new QRCode(holder,{text,width:size,height:size,colorDark:'#161b22',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
-    await new Promise(r=>setTimeout(r,20));
-    const canvas=holder.querySelector('canvas');
-    return canvas ? canvas.toDataURL('image/png') : '';
-  }finally{holder.remove();}
-}
-
 function lolerFilename(){
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
   const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
@@ -1753,8 +1679,18 @@ async function buildLolerPdfBlob(){
   // letterhead: logo + title, brand accent bar
   const logoH = 40, logoW = logoH*LOGO_ASPECT;
   try{ doc.addImage(LOGO_DATA_URI, 'PNG', margin, y, logoW, logoH); }catch(e){}
+  const qrSize = 44;
+  try{
+    const qrUrl = buildQrDataUrl(equipmentQrPayload());
+    if(qrUrl){
+      const qrX = margin+tableW-qrSize, qrY = y;
+      doc.setFillColor(255,255,255);
+      doc.roundedRect(qrX-3, qrY-3, qrSize+6, qrSize+6, 3, 3, 'F');
+      doc.addImage(qrUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+    }
+  }catch(e){}
   doc.setFont('helvetica','bold'); doc.setFontSize(12.5); doc.setTextColor(INK[0],INK[1],INK[2]);
-  const titleX = margin+logoW+18, titleW = tableW-logoW-18;
+  const titleX = margin+logoW+18, titleW = tableW-logoW-18-qrSize-10;
   const titleLines = doc.splitTextToSize('REPORT OF THOROUGH EXAMINATION OF LIFTING EQUIPMENT TO COMPLY WITH LOLER 1998 REGULATIONS', titleW);
   let ty = y+13;
   titleLines.forEach(line=>{ doc.text(line, titleX, ty); ty += 14; });
@@ -1765,12 +1701,6 @@ async function buildLolerPdfBlob(){
   doc.setFillColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]); doc.rect(margin, y, tableW*0.68, 3.2, 'F');
   doc.setFillColor(BRAND_ORANGE[0],BRAND_ORANGE[1],BRAND_ORANGE[2]); doc.rect(margin+tableW*0.68, y, tableW*0.32, 3.2, 'F');
   y += 18;
-  // Put the permanent equipment QR on every LOLER certificate so the next engineer can scan it.
-  try{
-    if(!state.equipmentId){ state.equipmentId = makeEquipmentId(); document.getElementById('f_equipmentId').value = state.equipmentId; }
-    const qrData = await makeQrDataUrl(equipmentQrValue(state.equipmentId), 72);
-    if(qrData){ doc.addImage(qrData,'PNG',pageW-margin-72,margin,72,72); doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(80,85,92); doc.text(state.equipmentId,pageW-margin-72,margin+80,{align:'left'}); }
-  }catch(e){}
 
   // ---- table drawing helpers ----
   function rowBox(height, fill){
@@ -2304,13 +2234,26 @@ function wkImportInfo(){
 }
 function wkClean(s, n){ return String(s==null?'':s).slice(0,n); }
 
-// compact, photo-free copy of one report — used by manual export and OneDrive sync
+// full copy of one report — used by manual export and OneDrive sync.
+// Signature/photo image bytes are left out to keep exported files a sane size
+// to send by email/Messages; everything else (every checklist item regardless
+// of status, full note text, LOLER details) is kept so a merged-in report is
+// a genuine, complete copy — not just a summary for the repairs list.
 function wkExportReport(x){
+  const r = x.r || {};
+  const loler = r.loler || {};
   return {
-    id:x.id, customer:x.r.customer||'', email:x.r.email||'', idno:x.r.idno||'', number:x.r.number||'',
-    manufacturer:x.r.manufacturer||'', date:wkReportDate(x), engineer:x.r.engineer||'', visitType:x.r.visitType||'Service',
-    items: wkItems(x.r).filter(it=> it && WK_RANK[it.status] !== undefined).map(it=>({
-      status:it.status, group:it.group||'', label:it.label||'', note:it.note||'', hasPhoto:!!(it.photo || it.hasPhoto)
+    id:x.id, customer:r.customer||'', email:r.email||'', idno:r.idno||'', number:r.number||'',
+    manufacturer:r.manufacturer||'', wll:r.wll||'', falls:r.falls||'',
+    date:wkReportDate(x), engineer:r.engineer||'', visitType:r.visitType||'Service', notes:r.notes||'',
+    loler:{
+      location:loler.location||'', makeserial:loler.makeserial||'', swl:loler.swl||'', description:loler.description||'',
+      prevexam:loler.prevexam||'', nextexam:loler.nextexam||'', ourref:loler.ourref||'',
+      extraA:loler.extraA||'', extraB:loler.extraB||'', extraC:loler.extraC||'',
+      signname:loler.signname||'', equipmentType:loler.equipmentType||'CRANE', hasSignature:!!loler.signature
+    },
+    items: wkItems(r).filter(Boolean).map(it=>({
+      status:it.status||null, group:it.group||'', label:it.label||'', note:it.note||'', hasPhoto:!!(it.photo || it.hasPhoto)
     }))
   };
 }
@@ -2350,24 +2293,72 @@ function wkSanitize(j){
   const incoming = [];
   j.reports.slice(0,500).forEach(r=>{
     if(!r || !wkParse(r.date)) return;
+    const loler = r.loler || {};
     incoming.push({
       id: wkClean(r.id,20) || String(Date.now()),
       customer: wkClean(r.customer,120), email: wkClean(r.email,120), idno: wkClean(r.idno,60),
       number: wkClean(r.number,60), manufacturer: wkClean(r.manufacturer,60),
+      wll: wkClean(r.wll,40), falls: wkClean(r.falls,40),
       date: String(r.date).slice(0,10), engineer: wkClean(r.engineer,60),
       visitType: ['Service','Inspection','LOLER'].includes(r.visitType) ? r.visitType : 'Service',
-      items: wkArr(r.items).slice(0,300).filter(it=> it && WK_RANK[it.status] !== undefined).map(it=>({
-        status:it.status, group:wkClean(it.group,60), label:wkClean(it.label,80), note:wkClean(it.note,400), hasPhoto:!!it.hasPhoto
+      notes: wkClean(r.notes,4000),
+      loler: {
+        location: wkClean(loler.location,120), makeserial: wkClean(loler.makeserial,80), swl: wkClean(loler.swl,40),
+        description: wkClean(loler.description,300), prevexam: wkParse(loler.prevexam)?String(loler.prevexam).slice(0,10):'',
+        nextexam: wkParse(loler.nextexam)?String(loler.nextexam).slice(0,10):'', ourref: wkClean(loler.ourref,60),
+        extraA: wkClean(loler.extraA,2000), extraB: wkClean(loler.extraB,2000), extraC: wkClean(loler.extraC,2000),
+        signname: wkClean(loler.signname,80),
+        equipmentType: ['CRANE','LIFTING_EQUIPMENT','FORKLIFT'].includes(loler.equipmentType) ? loler.equipmentType : 'CRANE',
+        hasSignature: !!loler.hasSignature
+      },
+      items: wkArr(r.items).slice(0,300).filter(it=> it && (it.status==null || WK_RANK[it.status]!==undefined || it.status==='SERV' || it.status==='NA')).map(it=>({
+        status: it.status||null, group:wkClean(it.group,60), label:wkClean(it.label,80), note:wkClean(it.note,2000), hasPhoto:!!it.hasPhoto
       }))
     });
   });
   return {incoming, firstWeek: wkParse(j.weekStart) ? String(j.weekStart).slice(0,10) : null};
 }
+// turns an imported report into a genuine local saved report — same shape the
+// app itself writes — so it shows up in "Saved Reports" and can be reopened,
+// reprinted or emailed like any report written on this device. Item ids are
+// rebuilt from group+label (same slug() used everywhere else) rather than
+// carried over, so this lines up correctly even if the checklist has changed.
+function wkPromoteToLocalReport(rep){
+  const items = {};
+  (rep.items||[]).forEach(it=>{
+    if(!it || !it.label) return;
+    const id = slug(it.group||'')+'__'+slug(it.label||'');
+    items[id] = {status: it.status||null, note: it.note||'', photo: null, label: it.label||'', group: it.group||''};
+  });
+  const loler = rep.loler || {};
+  const full = {
+    customer:rep.customer||'', manufacturer:rep.manufacturer||'', idno:rep.idno||'', number:rep.number||'',
+    wll:rep.wll||'', falls:rep.falls||'', email:rep.email||'', date:rep.date||'', engineer:rep.engineer||'',
+    visitType:rep.visitType||'Service', notes:rep.notes||'',
+    loler:{
+      location:loler.location||'', makeserial:loler.makeserial||'', swl:loler.swl||'',
+      description:loler.description||'', prevexam:loler.prevexam||'', nextexam:loler.nextexam||'',
+      ourref:loler.ourref||'', extraA:loler.extraA||'', extraB:loler.extraB||'', extraC:loler.extraC||'',
+      signname:loler.signname||'', signature:null, equipmentType:loler.equipmentType||'CRANE'
+    },
+    items
+  };
+  const reportId = 'imp_'+String(rep.id||Date.now());
+  storeSet('report_'+reportId, full);
+  const idx = wkArr(storeGet('report_index'));
+  if(!idx.some(e=>e && e.id===reportId)){
+    idx.push({id:reportId, customer:full.customer, idno:full.idno, date:full.date, visitType:full.visitType});
+    storeSet('report_index', idx);
+  }
+  return reportId;
+}
+
 // returns how many genuinely new reports were added (throws if storage is full/unavailable)
 function wkMergeImported(incoming){
   const existing = wkArr(storeGet('imported_reports'));
   const merged = wkDedupe([...existing, ...incoming].map(r=>({id:String(r.id||''), r, src:'imported'}))).map(x=>x.r);
   storeSet('imported_reports', merged);
+  incoming.forEach(wkPromoteToLocalReport);
   return merged.length - existing.length;
 }
 
@@ -2390,7 +2381,7 @@ async function wkImport(files){
   catch(e){ wkMsg(e.message, 'err'); return; }
   if(firstWeek) document.getElementById('wkDate').value = firstWeek;
   wkRender(); wkImportInfo();
-  wkMsg((added > 0 ? `Added ${wkPlural(added,'new report')}.` : 'Those reports were already here.') +
+  wkMsg((added > 0 ? `Added ${wkPlural(added,'new report')} — full copies now in Saved Reports too.` : 'Those reports were already here.') +
     (skippedFiles ? ` ${wkPlural(skippedFiles,'file')} skipped (not a weekly reports file).` : ''), added > 0 ? 'ok' : '');
 }
 
@@ -2439,7 +2430,16 @@ document.getElementById('wkImportFile').addEventListener('change', async e=>{
 });
 document.getElementById('wkClearImported').addEventListener('click', ()=>{
   if(!confirm('Remove the reports you added from other phones? Reports written on this device are not affected.')) return;
-  try{ storeSet('imported_reports', []); }catch(e){}
+  try{
+    const toRemove = new Set(wkArr(storeGet('imported_reports')).map(r=> 'imp_'+String(r.id||'')));
+    storeSet('imported_reports', []);
+    const idx = wkArr(storeGet('report_index')).filter(e=>{
+      if(!e || !toRemove.has(e.id)) return true;
+      try{ storeDelete('report_'+e.id); }catch(err){}
+      return false;
+    });
+    storeSet('report_index', idx);
+  }catch(e){}
   wkRender(); wkImportInfo();
   wkMsg('Added reports cleared.', 'ok');
 });
@@ -2710,53 +2710,6 @@ document.getElementById('btnMsSignOut').addEventListener('click', async ()=>{
 });
 document.getElementById('btnSyncNow').addEventListener('click', syncRun);
 
-// ---------- Draft recovery ----------
-// Keep an unfinished report available if the browser/app is closed accidentally.
-// A saved/completed report is never replaced by the draft; the engineer is simply
-// offered the choice to resume it when the app opens again.
-function clearDraft(){
-  try{ localStorage.removeItem('crane_report_draft_report'); localStorage.removeItem('crane_report_draft_report_time'); }catch(e){}
-}
-function restoreDraftIfAvailable(){
-  try{
-    const draft=storeGet('draft_report');
-    if(!draft || !draft.customer) return;
-    const stamp=storeGet('draft_report_time');
-    const when=stamp ? new Date(stamp) : null;
-    const age=when && !isNaN(when) ? Math.round((Date.now()-when.getTime())/60000) : null;
-    const ageText=age===null ? '' : age<1 ? 'just now' : age<60 ? age+' minute'+(age===1?'':'s')+' ago' : Math.round(age/60)+' hour'+(Math.round(age/60)===1?'':'s')+' ago';
-    if(confirm('An unfinished report was found'+(ageText?' ('+ageText+')':'')+' for '+draft.customer+'.\n\nResume it?')){
-      state=draft;
-      applyState(state);
-      setStatusMsg('Unfinished report restored.', 'ok');
-    }else{ clearDraft(); }
-  }catch(e){}
-}
-
-// ---------- Workflow upgrades ----------
-function updateDashboard(){const idx=storeGet('report_index')||[];let repairs=0,due=0;idx.forEach(e=>{const r=storeGet('report_'+e.id);if(!r)return;Object.values(r.items||{}).forEach(it=>{if(it&&(it.status==='URGENT'||it.status==='ATTN'))repairs++;});if(e.visitType==='LOLER'&&r.loler&&r.loler.nextexam){const d=new Date(r.loler.nextexam+'T00:00:00'),n=new Date();n.setHours(0,0,0,0);const c=new Date(n);c.setDate(c.getDate()+30);if(d<=c)due++;}});const customers=storeGet('companies')||[];const data=[['Reports',idx.length],['Customers',customers.length],['Repairs',repairs],['LOLER due',due]];const box=document.getElementById('dashStats');if(box)box.innerHTML=data.map(x=>`<div style="border:1px solid var(--line);border-radius:10px;padding:9px;text-align:center;background:#fff"><div style="font-size:20px;font-weight:800">${x[1]}</div><div style="font-size:11px;color:var(--ink-soft)">${x[0]}</div></div>`).join('');}
-document.getElementById('dashNew').addEventListener('click',()=>{if(state.customer&&!confirm('Start a new report? Make sure the current report is saved first.'))return;state=freshState(true);applyState(state);document.getElementById('companySelect').value='';document.getElementById('companySearch').value='';});
-document.getElementById('dashHistory').addEventListener('click',()=>document.getElementById('reportHistorySelect').scrollIntoView({behavior:'smooth',block:'center'}));
-document.getElementById('dashRepairs').addEventListener('click',()=>document.getElementById('wkList').scrollIntoView({behavior:'smooth',block:'center'}));
-document.getElementById('dashLoler').addEventListener('click',()=>document.getElementById('reminderCard').scrollIntoView({behavior:'smooth',block:'center'}));
-const companySearch=document.getElementById('companySearch');companySearch.addEventListener('input',()=>{const q=companySearch.value.trim().toLowerCase();companySelect.innerHTML='<option value="">— Select a saved company —</option>';companiesCache.forEach((c,i)=>{if(!q||(c.customer||'').toLowerCase().includes(q)){const o=document.createElement('option');o.value=i;o.textContent=c.customer||'(unnamed company)';companySelect.appendChild(o);}});});
-let autoSaveTimer;
-function scheduleDraftSave(){
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer=setTimeout(()=>{
-    try{
-      // Never turn a deliberately completed/blank sheet into a draft.
-      if(!state.customer) return;
-      storeSet('draft_report',state);
-      storeSet('draft_report_time',new Date().toISOString());
-    }catch(e){}
-  },800);
-}
-Object.keys(fieldMap).forEach(id=>{const el=document.getElementById(id);if(el)el.addEventListener('input',scheduleDraftSave);});
-document.getElementById('f_notes').addEventListener('input',scheduleDraftSave);
-setInterval(scheduleDraftSave,5000);
-updateDashboard();
-restoreDraftIfAvailable();
 syncInit();
 
 updateTopbarSub();

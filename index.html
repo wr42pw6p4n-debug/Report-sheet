@@ -511,6 +511,7 @@
   <button class="action-btn primary" id="btnSave" type="button">💾 Save report</button>
   <button class="action-btn yellow" id="btnComplete" type="button">✅ Complete &amp; start new</button>
   <button class="action-btn outline" id="btnPrint" type="button">🖨️ Print</button>
+  <button class="action-btn outline" id="btnQrLabel" type="button">🏷️ Print QR Label</button>
   <button class="action-btn outline" id="btnPdf" type="button">📄 Download PDF</button>
   <button class="action-btn outline" id="btnLoler" type="button" style="display:none; border-color:var(--serv); color:var(--serv);">📋 Download LOLER Report</button>
   <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
@@ -1382,13 +1383,38 @@ function handleScannedPayload(text){
     <div style="font-size:12.5px;color:var(--ink-soft);">Last visit: ${formatDateUK(r.date)} \u00b7 ${r.visitType||'Service'}${findings.length? ' \u00b7 '+findings.length+' finding(s) flagged' : ''}</div>
   </div>`;
   box.appendChild(card);
+  const btnRow = document.createElement('div');
+  btnRow.style.display = 'flex'; btnRow.style.gap = '8px'; btnRow.style.marginTop = '10px'; btnRow.style.flexWrap = 'wrap';
+  const viewBtn = document.createElement('button');
+  viewBtn.type = 'button'; viewBtn.className = 'action-btn outline'; viewBtn.style.flex = '1 1 auto';
+  viewBtn.textContent = '👁️ View Full Previous Report';
+  viewBtn.addEventListener('click', ()=> viewScannedReportPdf(r));
   const startBtn = document.createElement('button');
-  startBtn.type = 'button';
-  startBtn.className = 'action-btn yellow';
-  startBtn.style.marginTop = '10px';
+  startBtn.type = 'button'; startBtn.className = 'action-btn yellow'; startBtn.style.flex = '1 1 auto';
   startBtn.textContent = '✅ Start New Report From This';
   startBtn.addEventListener('click', ()=> startFromScannedReport(r));
-  box.appendChild(startBtn);
+  btnRow.appendChild(viewBtn); btnRow.appendChild(startBtn);
+  box.appendChild(btnRow);
+}
+
+// opens the scanned report's own PDF, exactly as it was — temporarily swaps
+// the working state/checklist to build it, then puts them straight back so
+// the in-progress new report on screen is never disturbed
+async function viewScannedReportPdf(r){
+  const savedState = state, savedChecklist = CHECKLIST;
+  try{
+    state = r;
+    CHECKLIST = checklistFor((r.loler && r.loler.equipmentType) || 'CRANE');
+    const doc = r.visitType === 'LOLER' ? await buildLolerPdfBlob() : await buildPdfBlob();
+    const blobUrl = doc.output('bloburl');
+    const w = window.open(blobUrl, '_blank');
+    setStatusMsg(w ? 'Previous report opened in a new tab.' : 'Pop-up blocked — allow pop-ups for this site.', w?'ok':'err');
+  }catch(e){
+    setStatusMsg('Could not open the previous report: '+e.message, 'err');
+  }finally{
+    state = savedState;
+    CHECKLIST = savedChecklist;
+  }
 }
 
 function startFromScannedReport(r){
@@ -1396,10 +1422,77 @@ function startFromScannedReport(r){
   fresh.customer = r.customer||''; fresh.manufacturer = r.manufacturer||''; fresh.idno = r.idno||'';
   fresh.number = r.number||''; fresh.wll = r.wll||''; fresh.falls = r.falls||''; fresh.email = r.email||'';
   applyState(fresh);
+  setEquipmentType((r.loler && r.loler.equipmentType) || 'CRANE', {restoring:true});
   companySelect.value = '';
-  document.getElementById('scanResult').style.display = 'none';
+  renderCarryForwardPanel(r);
   setStatusMsg('New report started from '+(r.customer||'previous equipment')+'.', 'ok');
   window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function cfColor(statusKey){
+  switch(statusKey){ case 'URGENT': return 'var(--urgent)'; case 'ATTN': return 'var(--attn)'; case 'MONITOR': return 'var(--monitor)'; default: return 'var(--line)'; }
+}
+
+// review panel for items flagged on the previous visit — confirm each one is
+// still an issue (carries the old note across) or has been fixed since
+function renderCarryForwardPanel(r){
+  const box = document.getElementById('scanResult');
+  const prevFlagged = Object.values(r.items||{}).filter(i=> i && (i.status==='URGENT'||i.status==='ATTN'||i.status==='MONITOR'));
+  if(prevFlagged.length===0){
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  box.innerHTML = '<p class="note-inline" style="margin-top:0;">Flagged last time — still an issue, or has it been sorted?</p>';
+  prevFlagged.forEach(it=>{
+    const id = slug(it.group||'')+'__'+slug(it.label||'');
+    const oldNote = it.note||'';
+    const row = document.createElement('div');
+    row.className = 'finding-card';
+    row.style.borderLeftColor = cfColor(it.status);
+    row.style.flexDirection = 'column'; row.style.alignItems = 'stretch'; row.style.gap = '8px';
+    const info = document.createElement('div');
+    info.innerHTML = `<div style="font-weight:700;font-size:13.5px;">${it.group||''} — ${it.label||''}</div>
+      <div style="font-size:12.5px;color:var(--ink-soft);">Last time: ${statusLabel(it.status)}${oldNote?' — '+oldNote:''}</div>`;
+    row.appendChild(info);
+    const btns = document.createElement('div');
+    btns.style.display = 'flex'; btns.style.gap = '8px';
+    const stillBtn = document.createElement('button');
+    stillBtn.type = 'button'; stillBtn.style.flex = '1'; stillBtn.style.color = '#fff'; stillBtn.style.border = 'none'; stillBtn.style.borderRadius = '6px'; stillBtn.style.padding = '8px'; stillBtn.style.fontWeight = '700'; stillBtn.style.fontSize = '12.5px';
+    stillBtn.style.background = cfColor(it.status);
+    stillBtn.textContent = 'Still needs it';
+    const fixedBtn = document.createElement('button');
+    fixedBtn.type = 'button'; fixedBtn.style.flex = '1'; fixedBtn.style.color = '#fff'; fixedBtn.style.border = 'none'; fixedBtn.style.borderRadius = '6px'; fixedBtn.style.padding = '8px'; fixedBtn.style.fontWeight = '700'; fixedBtn.style.fontSize = '12.5px';
+    fixedBtn.style.background = 'var(--serv)';
+    fixedBtn.textContent = '✅ Fixed';
+    stillBtn.addEventListener('click', ()=>{
+      setStatus(id, it.status);
+      const noteInput = document.getElementById('note_'+id);
+      if(noteInput){
+        const input = noteInput.querySelector('input');
+        if(input && !input.value){ input.value = oldNote; state.items[id].note = oldNote; }
+      }
+      row.style.opacity = '0.55';
+      stillBtn.disabled = true; fixedBtn.disabled = true;
+      setStatusMsg('Kept as '+statusLabel(it.status).toLowerCase()+' — see it in the checklist below.', 'ok');
+    });
+    fixedBtn.addEventListener('click', ()=>{
+      setStatus(id, 'SERV');
+      const resolvedNote = oldNote ? ('Resolved since last visit (was: '+oldNote+')') : 'Resolved since last visit';
+      const noteWrap = document.getElementById('note_'+id);
+      if(noteWrap){
+        const input = noteWrap.querySelector('input');
+        if(input){ input.value = resolvedNote; state.items[id].note = resolvedNote; }
+        noteWrap.classList.add('show');
+      }
+      row.style.opacity = '0.55';
+      stillBtn.disabled = true; fixedBtn.disabled = true;
+      setStatusMsg('Marked as fixed.', 'ok');
+    });
+    btns.appendChild(stillBtn); btns.appendChild(fixedBtn);
+    row.appendChild(btns);
+    box.appendChild(row);
+  });
 }
 
 document.getElementById('btnStartScan').addEventListener('click', startScan);
@@ -1438,6 +1531,22 @@ document.getElementById('btnPrint').addEventListener('click', async ()=>{
     setStatusMsg('Could not prepare the report for printing: '+e.message, 'err');
   }finally{
     btn.disabled = false; btn.textContent = '🖨️ Print';
+  }
+});
+
+document.getElementById('btnQrLabel').addEventListener('click', ()=>{
+  if(!state.customer){ setStatusMsg('Add a customer name first — the label needs something to identify the equipment.', 'err'); return; }
+  try{
+    const doc = buildQrLabelPdf();
+    const blobUrl = doc.output('bloburl');
+    const w = window.open(blobUrl, '_blank');
+    if(w){
+      setStatusMsg('Label opened in a new tab — print it from there onto your labels (you may need to set your printer\u2019s paper size to match).', 'ok');
+    } else {
+      setStatusMsg('Pop-up blocked — allow pop-ups for this site.', 'err');
+    }
+  }catch(e){
+    setStatusMsg('Could not build the label: '+e.message, 'err');
   }
 });
 
@@ -1480,6 +1589,29 @@ function buildQrDataUrl(text){
   }finally{
     document.body.removeChild(holder);
   }
+}
+
+// small printable label — stick this on the equipment itself so the next
+// engineer can scan it straight away without hunting through a report
+function buildQrLabelPdf(){
+  const { jsPDF } = window.jspdf;
+  const w = 80, h = 50;
+  const doc = new jsPDF({unit:'mm', format:[w,h], orientation:'landscape'});
+  doc.setFillColor(255,255,255); doc.rect(0,0,w,h,'F');
+  doc.setDrawColor(210,210,210); doc.rect(1,1,w-2,h-2);
+  const qrUrl = buildQrDataUrl(equipmentQrPayload());
+  const qrSize = 38;
+  if(qrUrl){ try{ doc.addImage(qrUrl, 'PNG', 4, (h-qrSize)/2, qrSize, qrSize); }catch(e){} }
+  const textX = 4+qrSize+4, textW = w-textX-3;
+  let ty = 11;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
+  doc.splitTextToSize(state.customer||'Unnamed customer', textW).slice(0,2).forEach(line=>{ doc.text(line, textX, ty); ty += 8.5; });
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(50,55,62);
+  if(state.number){ doc.text(doc.splitTextToSize('Crane: '+state.number, textW)[0], textX, ty); ty += 7; }
+  if(state.idno){ doc.text(doc.splitTextToSize('ID: '+state.idno, textW)[0], textX, ty); ty += 7; }
+  doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(130,130,130);
+  doc.text('Key Engineering \u2014 scan for history', textX, h-4);
+  return doc;
 }
 
 async function buildPdfBlob(){

@@ -1136,7 +1136,7 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.idno || 'no ID'} — ${formatDateUK(entry.date)}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.number || 'no crane no.'} — ${formatDateUK(entry.date)}`;
     historySelect.appendChild(o);
   });
 }
@@ -1266,7 +1266,7 @@ async function saveReport(){
   try{
     storeSet('report_'+reportId, state);
     const idx = await loadReportIndex();
-    idx.push({id:reportId, customer:state.customer, idno:state.idno, date:state.date, visitType:state.visitType});
+    idx.push({id:reportId, customer:state.customer, idno:state.idno, number:state.number, date:state.date, visitType:state.visitType});
     storeSet('report_index', idx);
     await refreshHistorySelect();
     await checkUpcomingLolerReminders();
@@ -2483,7 +2483,7 @@ function wkPromoteToLocalReport(rep){
   storeSet('report_'+reportId, full);
   const idx = wkArr(storeGet('report_index'));
   if(!idx.some(e=>e && e.id===reportId)){
-    idx.push({id:reportId, customer:full.customer, idno:full.idno, date:full.date, visitType:full.visitType});
+    idx.push({id:reportId, customer:full.customer, idno:full.idno, number:full.number, date:full.date, visitType:full.visitType});
     storeSet('report_index', idx);
   }
   return reportId;

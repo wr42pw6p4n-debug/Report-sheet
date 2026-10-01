@@ -1829,7 +1829,11 @@ async function buildLolerPdfBlob(){
   ty += 2;
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]);
   doc.text('EQUIPMENT TYPE: '+equipmentTypeLabel(state.loler.equipmentType).toUpperCase(), titleX, ty);
-  y += logoH + 12;
+  // the accent bar sits below whichever is taller — the logo or the title
+  // text (which wraps to a different number of lines depending on content) —
+  // using only the logo's height here was the bug: on longer wraps the text
+  // ran lower than the logo and the bar printed straight through it
+  y = Math.max(y+logoH, ty+6) + 12;
   doc.setFillColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]); doc.rect(margin, y, tableW*0.68, 3.2, 'F');
   doc.setFillColor(BRAND_ORANGE[0],BRAND_ORANGE[1],BRAND_ORANGE[2]); doc.rect(margin+tableW*0.68, y, tableW*0.32, 3.2, 'F');
   y += 18;

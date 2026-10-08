@@ -344,7 +344,6 @@
         <div class="field"><label>Customer</label><input type="text" id="f_customer"></div>
         <div class="field"><label>Manufacturer</label><input type="text" id="f_manufacturer"></div>
         <div class="field"><label>Identification No.</label><input type="text" id="f_idno"></div>
-        <div class="field"><label>Report Number</label><input type="text" id="f_reportno" placeholder="KE-2026-0001"></div>
         <div class="field"><label>Crane number</label><input type="text" id="f_number"></div>
         <div class="field"><label>Hoist WLL</label><input type="text" id="f_wll"></div>
         <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
@@ -651,12 +650,13 @@ let ITEM_IDS = [];
 
 // ---------- state ----------
 let state = {
-  reportNo:'', customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
+  customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
   date: new Date().toISOString().slice(0,10),
   engineer:'', visitType:'Service', notes:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
   items:{} // id -> {status, note}
 };
+
 // ---------- render legend ----------
 const legendEl = document.getElementById('legend');
 function serviceStatusLabel(){
@@ -873,7 +873,7 @@ function renderFindings(){
 renderFindings();
 
 // ---------- field bindings ----------
-const fieldMap = {f_reportno:'reportNo', f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
+const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
   f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer'};
 Object.entries(fieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
@@ -1048,21 +1048,8 @@ function formatDateUK(iso){
 
 function updateTopbarSub(){
   document.getElementById('topbarSub').textContent =
-    (state.reportNo ? state.reportNo + ' · ' : '') + (state.customer || 'New report') + ' · ' + formatDateUK(state.date) + (state.engineer ? ' · '+state.engineer : '');
+    (state.customer || 'New report') + ' · ' + formatDateUK(state.date) + (state.engineer ? ' · '+state.engineer : '');
 }
-
-function nextReportNumber(){
-  const year = new Date().getFullYear();
-  const idx = storeGet('report_index') || [];
-  let max = 0;
-  idx.forEach(e=>{
-    const m = String(e.reportNo||'').match(new RegExp('^KE-'+year+'-(\\d{4})$','i'));
-    if(m) max = Math.max(max, Number(m[1])||0);
-  });
-  return 'KE-'+year+'-'+String(max+1).padStart(4,'0');
-}
-
-if(!state.reportNo) state.reportNo = nextReportNumber();
 
 // ---------- local storage helper (works once this file is opened in a real browser tab) ----------
 function storeGet(key){
@@ -1108,7 +1095,6 @@ companySelect.addEventListener('change', ()=>{
   document.getElementById('f_customerpin').value=state.customerpin;
   document.getElementById('f_manufacturer').value='';
   document.getElementById('f_idno').value='';
-  document.getElementById('f_reportno').value=nextReportNumber();
   document.getElementById('f_number').value='';
   document.getElementById('f_wll').value='';
   document.getElementById('f_falls').value='';
@@ -1141,26 +1127,19 @@ document.getElementById('saveCompanyBtn').addEventListener('click', async ()=>{
 
 // ---------- saved reports ----------
 const historySelect = document.getElementById('reportHistorySelect');
-const historySearch = document.getElementById('reportHistorySearch');
 async function loadReportIndex(){
   return storeGet('report_index') || [];
 }
 async function refreshHistorySelect(){
   const idx = await loadReportIndex();
-  const q = String(historySearch.value||'').trim().toLowerCase();
   historySelect.innerHTML = '<option value="">— Load a previously saved report —</option>';
-  idx.slice().reverse().filter(entry=>{
-    if(!q) return true;
-    return [entry.reportNo,entry.customer,entry.number,entry.idno,entry.engineer,entry.date,entry.visitType]
-      .some(v=>String(v||'').toLowerCase().includes(q));
-  }).forEach(entry=>{
+  idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.reportNo || 'no report no.'} — ${entry.customer || '(unnamed)'} — ${entry.number || 'no crane no.'} — ${formatDateUK(entry.date)}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.number || 'no crane no.'} — ${formatDateUK(entry.date)}`;
     historySelect.appendChild(o);
   });
 }
-historySearch.addEventListener('input', refreshHistorySelect);
 refreshHistorySelect();
 
 // ---------- LOLER re-examination reminders ----------
@@ -1287,7 +1266,7 @@ async function saveReport(){
   try{
     storeSet('report_'+reportId, state);
     const idx = await loadReportIndex();
-    idx.push({id:reportId, reportNo:state.reportNo, customer:state.customer, idno:state.idno, number:state.number, date:state.date, engineer:state.engineer, visitType:state.visitType});
+    idx.push({id:reportId, customer:state.customer, idno:state.idno, number:state.number, date:state.date, visitType:state.visitType});
     storeSet('report_index', idx);
     await refreshHistorySelect();
     await checkUpcomingLolerReminders();
@@ -1309,7 +1288,7 @@ function freshState(keepEngineer){
     items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
   });
   return {
-    reportNo:nextReportNumber(), customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
+    customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
     visitType:'Service', notes:'',
@@ -1628,7 +1607,6 @@ function buildQrLabelPdf(){
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(20,20,20);
   doc.splitTextToSize(state.customer||'Unnamed customer', textW).slice(0,2).forEach(line=>{ doc.text(line, textX, ty); ty += 8.5; });
   doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(50,55,62);
-  if(state.reportNo){ doc.text(doc.splitTextToSize('Report: '+state.reportNo, textW)[0], textX, ty); ty += 7; }
   if(state.number){ doc.text(doc.splitTextToSize('Crane: '+state.number, textW)[0], textX, ty); ty += 7; }
   if(state.idno){ doc.text(doc.splitTextToSize('ID: '+state.idno, textW)[0], textX, ty); ty += 7; }
   doc.setFont('helvetica','italic'); doc.setFontSize(6); doc.setTextColor(130,130,130);
@@ -1674,7 +1652,6 @@ async function buildPdfBlob(){
   // info grid (two columns)
   const colW = (pageW - margin*2)/2;
   const infoLeft = [
-    ['Report No.', state.reportNo||'—'],
     ['Customer', state.customer||'—'],
     ['Manufacturer', state.manufacturer||'—'],
     ['Identification No.', state.idno||'—'],
@@ -1777,10 +1754,9 @@ async function buildPdfBlob(){
 }
 
 function reportFilename(){
-  const reportNo = (state.reportNo||'report').replace(/[^a-z0-9-]+/gi,'_');
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
   const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
-  return `${reportNo}_${cust}${craneNo?'_'+craneNo:''}_${state.visitType}_${state.date}.pdf`;
+  return `${cust}${craneNo?'_'+craneNo:''}_${state.visitType}_${state.date}.pdf`;
 }
 
 document.getElementById('btnPdf').addEventListener('click', async ()=>{
@@ -1808,7 +1784,6 @@ function equipmentTypeLabel(type){
 }
 
 function lolerFilename(){
-  const reportNo = (state.reportNo||'report').replace(/[^a-z0-9-]+/gi,'_');
   const cust = (state.customer||'report').replace(/[^a-z0-9]+/gi,'_');
   const craneNo = (state.number||'').trim().replace(/[^a-z0-9]+/gi,'_');
   const equip = equipmentTypeLabel(state.loler.equipmentType).replace(/[^a-z0-9]+/gi,'_');
@@ -2045,7 +2020,7 @@ function reportPlainText(full){
 document.getElementById('btnEmail').addEventListener('click', async ()=>{
   if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
   const btn = document.getElementById('btnEmail');
-  const subject = `Crane Service Report ${state.reportNo ? '– '+state.reportNo+' ' : ''}– ${state.customer} – ${state.date}`;
+  const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
 
   // Try to actually attach the PDF via the device's native share sheet — this is
   // the only route a website has to hand a real file to the Mail app. It can't

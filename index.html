@@ -1350,7 +1350,12 @@ let notifOpen = null, notifLimit = 25, notifFilter = '', notifData = {due:[], re
 // outstanding repairs = for each item on each piece of equipment, look at the MOST RECENT
 // visit that recorded it: still Urgent / Req's Attn and no work carried out → outstanding.
 // Repairs done = work carried out recorded in the last 30 days.
+// completions are stored separately from the reports (the original report is never altered):
+// key = report (number or id) + item, value = {date, note}
+function compKeyFor(v, it){ return (v.r.reportNo || v.id) + '|' + slug(it.group||'') + '__' + slug(it.label||''); }
+function getCompletions(){ return storeGet('repair_completions') || {}; }
 function collectRepairs(){
+  const comps = getCompletions();
   const byEq = new Map();
   eqAllVisits().forEach(v=>{ const k = eqKey(v.r); if(!byEq.has(k)) byEq.set(k, []); byEq.get(k).push(v); });
   const cutoff = wkAddDays(wkIso(new Date()), -30);
@@ -1361,17 +1366,21 @@ function collectRepairs(){
     visits.forEach(v=>{
       wkItems(v.r).filter(Boolean).forEach(it=>{
         if(!it.label) return;
-        if(it.work && String(it.work).trim() && (v.date||'') >= cutoff) done.push({v, r:v.r, it});
+        if(it.work && String(it.work).trim() && (v.date||'') >= cutoff && !comps[compKeyFor(v, it)]) done.push({v, r:v.r, it});
         if(!it.status) return;
         latest.set(slug(it.group||'')+'__'+slug(it.label), {v, it});
       });
     });
     latest.forEach(x=>{
-      if((x.it.status === 'URGENT' || x.it.status === 'ATTN') && !(x.it.work && String(x.it.work).trim())) open.push({v:x.v, r:x.v.r, it:x.it});
+      if(x.it.status === 'URGENT' || x.it.status === 'ATTN'){
+        const comp = comps[compKeyFor(x.v, x.it)];
+        if(comp){ if((comp.date||'') >= cutoff) done.push({v:x.v, r:x.v.r, it:x.it, comp, sortDate:comp.date}); }
+        else if(!(x.it.work && String(x.it.work).trim())) open.push({v:x.v, r:x.v.r, it:x.it});
+      }
     });
   });
   open.sort((a,b)=> (a.it.status==='URGENT'?0:1) - (b.it.status==='URGENT'?0:1) || (a.v.date||'').localeCompare(b.v.date||''));
-  done.sort((a,b)=> (b.v.date||'').localeCompare(a.v.date||''));
+  done.sort((a,b)=> (b.sortDate||b.v.date||'').localeCompare(a.sortDate||a.v.date||''));
   return {open, done};
 }
 
@@ -1411,16 +1420,60 @@ function buildRepairRow(x, isDone){
       <div style="flex:1;">
         <div style="font-weight:700;font-size:13.5px;">${wkEsc(r.customer || '(unnamed customer)')}${r.number ? ' — Crane '+wkEsc(r.number) : ''}</div>
         <div style="font-size:13px;"><b>${wkEsc(it.group||'')} — ${wkEsc(it.label||'')}</b>${it.note ? ': '+wkEsc(it.note) : ''}</div>
-        ${isDone ? `<div style="font-size:13px;color:var(--serv);font-weight:700;">🔧 ${wkEsc(it.work)}</div>` : ''}
-        <div style="font-size:12px;color:var(--ink-soft);">${wkEsc(formatDateUK(x.v.date))} · ${wkEsc(r.visitType||'Service')}${r.reportNo ? ' · '+wkEsc(r.reportNo) : ''}${r.engineer ? ' · '+wkEsc(r.engineer) : ''}</div>
+        ${isDone && x.comp ? `<div style="font-size:13px;color:var(--serv);font-weight:700;">✅ Completed ${wkEsc(formatDateUK(x.comp.date))}${x.comp.note ? ' — '+wkEsc(x.comp.note) : ''}</div>` : ''}
+        ${isDone && it.work && String(it.work).trim() ? `<div style="font-size:13px;color:var(--serv);font-weight:700;">🔧 ${wkEsc(it.work)}</div>` : ''}
+        <div style="font-size:12px;color:var(--ink-soft);">Reported ${wkEsc(formatDateUK(x.v.date))} · ${wkEsc(r.visitType||'Service')}${r.reportNo ? ' · '+wkEsc(r.reportNo) : ''}${r.engineer ? ' · '+wkEsc(r.engineer) : ''}</div>
       </div>
       ${isDone ? '' : `<span class="badge ${b[0]}" style="position:static;white-space:nowrap;">${b[1]}</span>`}
     </div>`;
   const btns = document.createElement('div'); btns.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-  if(!isDone && !Array.isArray(r.items)){
-    const go = document.createElement('button'); go.type='button'; go.className='btn-ghost'; go.textContent='▶ Start report';
-    go.addEventListener('click', ()=> startFromScannedReport(r));
-    btns.appendChild(go);
+
+  if(!isDone){
+    // ✅ Completed — stamps today's date automatically; asks what was done (optional) so it can't be tapped by accident
+    const comp = document.createElement('button'); comp.type='button'; comp.className='btn-ghost';
+    comp.textContent = '✅ Completed';
+    comp.style.cssText = 'border-color:var(--serv);color:var(--serv);font-weight:800;';
+    comp.addEventListener('click', ()=>{
+      comp.style.display = 'none';
+      const box = document.createElement('div'); box.style.cssText = 'display:flex;flex-direction:column;gap:6px;width:100%;';
+      const today = wkIso(new Date());
+      box.innerHTML = `<div style="font-size:12.5px;color:var(--ink-soft);">Completed <b>${wkEsc(formatDateUK(today))}</b> — what was done? (optional)</div>`;
+      const inp = document.createElement('input'); inp.type='text'; inp.placeholder = 'e.g. Fitted new brake lining';
+      const rowB = document.createElement('div'); rowB.style.cssText = 'display:flex;gap:8px;';
+      const ok = document.createElement('button'); ok.type='button'; ok.className='btn-ghost'; ok.textContent='✅ Confirm completed';
+      ok.style.cssText = 'background:var(--serv);color:#fff;border-color:var(--serv);font-weight:800;flex:1;';
+      const no = document.createElement('button'); no.type='button'; no.className='btn-ghost'; no.textContent='Cancel';
+      no.addEventListener('click', ()=>{ box.remove(); comp.style.display = ''; });
+      ok.addEventListener('click', ()=>{
+        try{
+          const comps = getCompletions();
+          comps[compKeyFor(x.v, it)] = {date: today, note: inp.value.trim()};
+          storeSet('repair_completions', comps);
+        }catch(e){ setStatusMsg('Could not save: '+e.message, 'err'); return; }
+        setStatusMsg('Marked completed on '+formatDateUK(today)+'.', 'ok');
+        renderDueDates();
+        try{ renderEqResults(); }catch(e){}
+      });
+      rowB.appendChild(ok); rowB.appendChild(no);
+      box.appendChild(inp); box.appendChild(rowB);
+      btns.appendChild(box);
+      inp.focus();
+    });
+    btns.appendChild(comp);
+    if(!Array.isArray(r.items)){
+      const go = document.createElement('button'); go.type='button'; go.className='btn-ghost'; go.textContent='▶ Start report';
+      go.addEventListener('click', ()=> startFromScannedReport(r));
+      btns.appendChild(go);
+    }
+  } else if(x.comp){
+    const re = document.createElement('button'); re.type='button'; re.className='btn-ghost'; re.textContent='↩ Reopen';
+    re.addEventListener('click', ()=>{
+      try{ const comps = getCompletions(); delete comps[compKeyFor(x.v, it)]; storeSet('repair_completions', comps); }catch(e){ setStatusMsg('Could not save: '+e.message, 'err'); return; }
+      setStatusMsg('Repair reopened.', 'ok');
+      renderDueDates();
+      try{ renderEqResults(); }catch(e){}
+    });
+    btns.appendChild(re);
   }
   const h = document.createElement('button'); h.type='button'; h.className='btn-ghost'; h.textContent='🕘 History';
   h.addEventListener('click', ()=> showEquipHistory(r.customer||'', r.number||'', r.idno||''));
@@ -1431,7 +1484,7 @@ function buildRepairRow(x, isDone){
 function notifRowText(cat, x){
   const r = x.r;
   const base = [r.customer, r.number, r.idno, r.site, r.engineer, r.reportNo].join(' ');
-  return (base + ' ' + (x.it ? [x.it.group, x.it.label, x.it.note, x.it.work].join(' ') : (x.kind||''))).toLowerCase();
+  return (base + ' ' + (x.it ? [x.it.group, x.it.label, x.it.note, x.it.work, x.comp && x.comp.note].join(' ') : (x.kind||''))).toLowerCase();
 }
 function renderNotifPanel(){
   const list = document.getElementById('reminderList');
@@ -1740,6 +1793,8 @@ function renderEqTimeline(g){
       const b = WK_BADGE[i.status];
       html += `<div style="font-size:13px;"><span class="badge ${b[0]}">${b[1]}</span> <b>${wkEsc(i.group)} — ${wkEsc(i.label)}</b>${i.note ? ': '+wkEsc(i.note) : ''}`;
       if(i.work && String(i.work).trim()) html += `<div style="color:var(--serv);font-weight:700;">🔧 ${wkEsc(i.work)}</div>`;
+      const c = getCompletions()[compKeyFor(v, i)];
+      if(c) html += `<div style="color:var(--serv);font-weight:700;">✅ Completed ${wkEsc(formatDateUK(c.date))}${c.note ? ' — '+wkEsc(c.note) : ''}</div>`;
       html += `</div>`;
     });
     otherWork.forEach(i=>{

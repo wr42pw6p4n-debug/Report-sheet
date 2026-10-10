@@ -368,6 +368,7 @@
         <div class="field"><label>Hoist WLL</label><input type="text" id="f_wll"></div>
         <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
         <div class="field"><label>Customer email</label><input type="email" id="f_email"></div>
+        <div class="field"><label>Site / location</label><input type="text" id="f_site" placeholder="e.g. Unit 4, Chesterfield depot"></div>
         <div class="field"><label>Customer portal PIN</label><input type="text" id="f_customerpin" inputmode="numeric" maxlength="6" placeholder="4\u20136 digits"></div>
         <div class="field"><label>Date</label><input type="date" id="f_date"></div>
         <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
@@ -477,10 +478,13 @@
   <div class="section no-print" id="equipHistoryCard">
     <div class="section-head"><div class="section-tag"></div><h2>Equipment History</h2></div>
     <div class="section-body">
-      <p class="note-inline" style="margin-top:-4px;">Every visit to a piece of equipment, newest first &mdash; what was found and what work was carried out. Type a customer name or crane number (e.g. PL14), or scan the equipment's QR label.</p>
-      <div class="field full"><input type="search" id="eqSearch" placeholder="Customer or crane no. — e.g. PL14"></div>
+      <button class="btn-ghost" id="btnEqToggle" type="button" style="width:100%;">🕘 Show Equipment History</button>
+      <div id="eqBody" style="display:none; margin-top:12px;">
+      <p class="note-inline" style="margin-top:-4px;">Every visit to a piece of equipment, newest first &mdash; what was found and what work was carried out. Search by crane or ID number, customer, site, engineer, date (e.g. 9 October, 09/10/2026 or October 2026), report number or a word from the findings (e.g. brake). You can combine words — &ldquo;PL14 dave&rdquo; — or scan the equipment's QR label.</p>
+      <div class="field full"><input type="search" id="eqSearch" placeholder="Crane, customer, site, engineer, date…"></div>
       <div id="eqResults" style="margin-top:8px;"></div>
       <div id="eqTimeline"></div>
+      </div>
     </div>
   </div>
 
@@ -678,7 +682,7 @@ let ITEM_IDS = [];
 let state = {
   customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
   date: new Date().toISOString().slice(0,10),
-  engineer:'', visitType:'Service', notes:'', reportNo:'', nextdue:'',
+  engineer:'', visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
   items:{} // id -> {status, note}
 };
@@ -975,7 +979,7 @@ renderFindings();
 
 // ---------- field bindings ----------
 const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
-  f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer', f_reportNo:'reportNo', f_nextdue:'nextdue'};
+  f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer', f_reportNo:'reportNo', f_nextdue:'nextdue', f_site:'site'};
 Object.entries(fieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
   el.value = state[key];
@@ -1014,6 +1018,7 @@ function setVisitType(type){
     }
     state.nextdue = state.loler.nextexam;
     document.getElementById('f_nextdue').value = state.nextdue;
+    if(!state.loler.location && state.site){ state.loler.location = state.site; document.getElementById('loler_location').value = state.site; }
     if(!state.loler.signname && state.engineer){ state.loler.signname = state.engineer; document.getElementById('loler_signname').value = state.loler.signname; }
     renderLolerSections();
     restoreSignaturePad();
@@ -1417,6 +1422,7 @@ function applyState(loaded){
   state = loaded;
   if(state.reportNo === undefined) state.reportNo = '';
   if(state.nextdue === undefined) state.nextdue = '';
+  if(state.site === undefined) state.site = '';
   if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'};
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
@@ -1496,7 +1502,7 @@ function freshState(keepEngineer){
     customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
-    visitType:'Service', notes:'', reportNo:'', nextdue:'',
+    visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'',
     loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
     items
   };
@@ -1517,13 +1523,27 @@ function eqAllVisits(){
   });
   return [...best.values()];
 }
+// everything a visit can be found by: crane / ID / customer / site / engineer /
+// report no. / visit type / date (typed any usual way) / flagged findings and work done
+function eqDateText(iso){
+  const d = wkParse(iso); if(!d) return '';
+  const full = ['January','February','March','April','May','June','July','August','September','October','November','December'][d.getMonth()];
+  const dd = String(d.getDate()).padStart(2,'0'), mm = String(d.getMonth()+1).padStart(2,'0');
+  return [iso, `${dd}/${mm}/${d.getFullYear()}`, `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`, `${d.getDate()} ${full} ${d.getFullYear()}`, `${full} ${d.getFullYear()}`].join(' ');
+}
+function eqHay(v){
+  const r = v.r;
+  const text = wkItems(r).filter(Boolean).map(i=> [i.note, i.work, (WK_RANK[i.status] !== undefined || i.work) ? i.label : ''].join(' ')).join(' ');
+  return [r.customer, r.number, r.idno, r.manufacturer, r.reportNo, r.engineer, r.site, r.loler && r.loler.location,
+          r.visitType, eqDateText(v.date), text].join(' ').toLowerCase();
+}
 function eqGroups(query){
   const q = String(query||'').trim().toLowerCase();
   const tokens = q ? q.split(/\s+/) : [];
   const groups = new Map();
   eqAllVisits().forEach(v=>{
     const r = v.r;
-    const hay = [r.customer, r.number, r.idno, r.manufacturer, r.reportNo].join(' ').toLowerCase();
+    const hay = eqHay(v);
     if(!tokens.every(t=> hay.includes(t))) return;
     const k = eqKey(r);
     if(!groups.has(k)) groups.set(k, {key:k, customer:r.customer||'', number:r.number||'', idno:r.idno||'', visits:[]});
@@ -1601,7 +1621,15 @@ function renderEqTimeline(g){
     box.appendChild(card);
   });
 }
+function setEqOpen(open){
+  document.getElementById('eqBody').style.display = open ? 'block' : 'none';
+  document.getElementById('btnEqToggle').textContent = open ? '▲ Hide Equipment History' : '🕘 Show Equipment History';
+}
+document.getElementById('btnEqToggle').addEventListener('click', ()=>{
+  setEqOpen(document.getElementById('eqBody').style.display === 'none');
+});
 function showEquipHistory(customer, number, idno){
+  setEqOpen(true);
   const input = document.getElementById('eqSearch');
   input.value = [customer, number].filter(Boolean).join(' ');
   renderEqResults();
@@ -1740,7 +1768,7 @@ async function viewScannedReportPdf(r){
 function startFromScannedReport(r){
   const fresh = freshState(false);
   fresh.customer = r.customer||''; fresh.manufacturer = r.manufacturer||''; fresh.idno = r.idno||'';
-  fresh.number = r.number||''; fresh.wll = r.wll||''; fresh.falls = r.falls||''; fresh.email = r.email||'';
+  fresh.number = r.number||''; fresh.site = r.site||''; fresh.wll = r.wll||''; fresh.falls = r.falls||''; fresh.email = r.email||'';
   applyState(fresh);
   setEquipmentType((r.loler && r.loler.equipmentType) || 'CRANE', {restoring:true});
   companySelect.value = '';
@@ -2715,7 +2743,7 @@ function wkExportReport(x){
   const r = x.r || {};
   const loler = r.loler || {};
   return {
-    id:x.id, reportNo:r.reportNo||'', nextdue:r.nextdue||'', customer:r.customer||'', email:r.email||'', idno:r.idno||'', number:r.number||'',
+    id:x.id, reportNo:r.reportNo||'', nextdue:r.nextdue||'', site:r.site||'', customer:r.customer||'', email:r.email||'', idno:r.idno||'', number:r.number||'',
     manufacturer:r.manufacturer||'', wll:r.wll||'', falls:r.falls||'',
     date:wkReportDate(x), engineer:r.engineer||'', visitType:r.visitType||'Service', notes:r.notes||'',
     loler:{
@@ -2768,7 +2796,7 @@ function wkSanitize(j){
     const loler = r.loler || {};
     incoming.push({
       id: wkClean(r.id,20) || String(Date.now()),
-      reportNo: wkClean(r.reportNo,40),
+      reportNo: wkClean(r.reportNo,40), site: wkClean(r.site,120),
       nextdue: wkParse(r.nextdue) ? String(r.nextdue).slice(0,10) : '',
       customer: wkClean(r.customer,120), email: wkClean(r.email,120), idno: wkClean(r.idno,60),
       number: wkClean(r.number,60), manufacturer: wkClean(r.manufacturer,60),
@@ -2806,7 +2834,7 @@ function wkPromoteToLocalReport(rep){
   });
   const loler = rep.loler || {};
   const full = {
-    reportNo:rep.reportNo||'', nextdue:rep.nextdue||'', customer:rep.customer||'', manufacturer:rep.manufacturer||'', idno:rep.idno||'', number:rep.number||'',
+    reportNo:rep.reportNo||'', nextdue:rep.nextdue||'', site:rep.site||'', customer:rep.customer||'', manufacturer:rep.manufacturer||'', idno:rep.idno||'', number:rep.number||'',
     wll:rep.wll||'', falls:rep.falls||'', email:rep.email||'', date:rep.date||'', engineer:rep.engineer||'',
     visitType:rep.visitType||'Service', notes:rep.notes||'',
     loler:{

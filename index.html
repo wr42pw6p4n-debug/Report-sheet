@@ -168,6 +168,9 @@
   .item-note{margin-top:8px; display:none;}
   .item-note.show{display:block;}
   .item-note input{font-size:13.5px; padding:7px 9px;}
+  .work-toggle{margin-top:8px; display:none; border:1.5px dashed var(--steel-700); background:#fff; border-radius:7px; font-size:12px; font-weight:700; padding:6px 10px; cursor:pointer; color:var(--steel-800);}
+  .work-toggle.show{display:inline-block;}
+  .item-note.work input{border-color:var(--serv);}
   .photo-row{display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;}
   .photo-btn{
     border:1.5px dashed var(--steel-700); background:#fff; border-radius:7px;
@@ -298,6 +301,23 @@
     <p class="report-sub" id="topbarSub">New report — not yet saved</p>
   </div>
 
+  <!-- DUE DATES (services, inspections, LOLER) -->
+  <div class="section no-print" id="reminderCard" style="display:none;">
+    <div class="section-head"><div class="section-tag" style="background:var(--urgent);"></div><h2 id="dueTitle">⏰ Due Dates</h2></div>
+    <div class="section-body">
+      <div class="field" style="max-width:260px;"><label for="dueWindow">Show work due within</label>
+        <select id="dueWindow"><option value="7">7 days</option><option value="14">14 days</option><option value="30" selected>30 days</option><option value="60">60 days</option><option value="90">90 days</option></select>
+      </div>
+      <div id="reminderList" style="margin-top:10px;"></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+        <button class="btn-ghost" id="btnDueCalAll" type="button">📅 Add all to my calendar</button>
+        <button class="btn-ghost" id="btnEmailReminders" type="button">✉️ Email me this list</button>
+      </div>
+      <div class="field full" style="margin-top:10px;"><label>Your email (for the email button)</label><input type="email" id="reminderEmail"></div>
+      <p class="note-inline">Calendar events set their own alerts on your iPad/phone &mdash; 30 days before, 7 days before and on the day &mdash; so you get a proper notification even when the app is closed.</p>
+    </div>
+  </div>
+
   <!-- TEAM SYNC (OneDrive) -->
   <div class="section no-print">
     <div class="section-head"><div class="section-tag"></div><h2>Team Sync — OneDrive</h2></div>
@@ -351,6 +371,12 @@
         <div class="field"><label>Customer portal PIN</label><input type="text" id="f_customerpin" inputmode="numeric" maxlength="6" placeholder="4\u20136 digits"></div>
         <div class="field"><label>Date</label><input type="date" id="f_date"></div>
         <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
+        <div class="field"><label>Next due date</label><input type="date" id="f_nextdue"></div>
+        <div class="field"><label>Set next due in…</label>
+          <div class="visit-toggle" id="dueQuick"><button type="button" data-m="3">3 months</button><button type="button" data-m="6">6 months</button><button type="button" data-m="12">12 months</button></div>
+        </div>
+        <div class="field full"><button class="btn-ghost" id="btnDueCal" type="button">📅 Add this next due date to my calendar</button></div>
+        <div class="field"><label>Report no.</label><input type="text" id="f_reportNo" readonly placeholder="Given when you save" style="background:#f3f5f7;font-weight:700;"></div>
         <div class="field">
           <label>Type of visit</label>
           <div class="visit-toggle" id="visitTypeToggle">
@@ -436,17 +462,6 @@
     </div>
   </div>
 
-  <!-- LOLER RE-EXAMINATION REMINDERS -->
-  <div class="section no-print" id="reminderCard" style="display:none;">
-    <div class="section-head"><div class="section-tag" style="background:var(--urgent);"></div><h2>⏰ Upcoming Re-examinations</h2></div>
-    <div class="section-body">
-      <p class="note-inline" style="margin-top:-4px;">Checked from LOLER reports saved on this device — due within 30 days, or overdue.</p>
-      <div id="reminderList"></div>
-      <div class="field full" style="margin-top:10px;"><label>Your email (for the reminder button below)</label><input type="email" id="reminderEmail"></div>
-      <button class="btn-ghost" id="btnEmailReminders" type="button">✉️ Email me this list</button>
-    </div>
-  </div>
-
   <!-- PAST REPORTS -->
   <div class="section no-print">
     <div class="section-head"><div class="section-tag"></div><h2>Saved Reports</h2></div>
@@ -455,6 +470,17 @@
         <select id="reportHistorySelect"><option value="">— Load a previously saved report —</option></select>
       </div>
       <p class="note-inline" id="historyHint">Reports you save are stored in this browser on this device — they won't appear if you open the file on a different phone or computer, or in private/incognito mode.</p>
+    </div>
+  </div>
+
+  <!-- EQUIPMENT HISTORY -->
+  <div class="section no-print" id="equipHistoryCard">
+    <div class="section-head"><div class="section-tag"></div><h2>Equipment History</h2></div>
+    <div class="section-body">
+      <p class="note-inline" style="margin-top:-4px;">Every visit to a piece of equipment, newest first &mdash; what was found and what work was carried out. Type a customer name or crane number (e.g. PL14), or scan the equipment's QR label.</p>
+      <div class="field full"><input type="search" id="eqSearch" placeholder="Customer or crane no. — e.g. PL14"></div>
+      <div id="eqResults" style="margin-top:8px;"></div>
+      <div id="eqTimeline"></div>
     </div>
   </div>
 
@@ -652,7 +678,7 @@ let ITEM_IDS = [];
 let state = {
   customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
   date: new Date().toISOString().slice(0,10),
-  engineer:'', visitType:'Service', notes:'',
+  engineer:'', visitType:'Service', notes:'', reportNo:'', nextdue:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
   items:{} // id -> {status, note}
 };
@@ -696,7 +722,7 @@ function buildChecklistDom(){
     g.items.forEach(label=>{
       const id = slug(g.group)+'__'+slug(label);
       ITEM_IDS.push(id);
-      if(!state.items[id]) state.items[id] = {status:null, note:'', photo:null, label, group:g.group};
+      if(!state.items[id]) state.items[id] = {status:null, note:'', work:'', photo:null, label, group:g.group};
 
       const row = document.createElement('div');
       row.className = 'item-row';
@@ -744,11 +770,78 @@ function buildChecklistDom(){
 
       row.appendChild(noteWrap);
 
+      // "Work carried out" — what was actually done (e.g. fitted new brake lining).
+      // Goes on the PDF and into the equipment's history.
+      const workToggle = document.createElement('button');
+      workToggle.type = 'button'; workToggle.className = 'work-toggle'; workToggle.id = 'worktoggle_'+id;
+      workToggle.addEventListener('click', ()=>{
+        const w = document.getElementById('work_'+id);
+        w.classList.toggle('show');
+        if(w.classList.contains('show')) w.querySelector('input').focus();
+        refreshWorkUi(id);
+      });
+      row.appendChild(workToggle);
+      const workWrap = document.createElement('div');
+      workWrap.className = 'item-note work'; workWrap.id = 'work_'+id;
+      const workInput = document.createElement('input');
+      workInput.type = 'text'; workInput.placeholder = 'Work carried out — e.g. fitted new brake lining';
+      workInput.addEventListener('input', e=>{ state.items[id].work = e.target.value; renderFindings(); });
+      workWrap.appendChild(workInput);
+      row.appendChild(workWrap);
+
       checklistContainer.appendChild(row);
     });
   });
 }
 buildChecklistDom();
+
+function refreshWorkUi(id){
+  const it = state.items[id];
+  const toggle = document.getElementById('worktoggle_'+id);
+  const wrap = document.getElementById('work_'+id);
+  if(!it || !toggle || !wrap) return;
+  const eligible = !!it.status && it.status !== 'NA';
+  const has = !!(it.work && String(it.work).trim());
+  toggle.classList.toggle('show', eligible);
+  if(!eligible){ wrap.classList.remove('show'); return; }
+  if(has) wrap.classList.add('show');
+  toggle.textContent = wrap.classList.contains('show') ? '🔧 Work carried out ▾' : '＋ Work carried out';
+}
+function openWork(id){
+  const w = document.getElementById('work_'+id);
+  if(w) w.classList.add('show');
+  refreshWorkUi(id);
+}
+
+// ---------- report numbers ----------
+// KE-YYMMDD-INITIALS-NN: the date, the engineer's initials and a count for that
+// engineer that day. Two phones can never clash unless two engineers share
+// initials AND write reports on the same day. Replaced by one shared running
+// number once OneDrive sync is live.
+function engineerInitials(name){
+  const parts = String(name||'').trim().split(/[^A-Za-z]+/).filter(Boolean);
+  if(!parts.length) return 'XX';
+  return parts.slice(0,3).map(p=>p[0].toUpperCase()).join('');
+}
+function assignReportNo(){
+  if(state.reportNo) return state.reportNo;
+  const d = String(state.date || new Date().toISOString().slice(0,10));
+  const base = 'KE-' + d.replace(/-/g,'').slice(2,8) + '-' + engineerInitials(state.engineer);
+  const counters = storeGet('report_counters') || {};
+  let n = (Number(counters[base])||0) + 1;
+  try{
+    // also look at reports already on this device (including ones added from other phones)
+    eqAllVisits().forEach(v=>{
+      const no = String(v.r.reportNo||'');
+      if(no.indexOf(base+'-') === 0){ const m = /-(\d+)$/.exec(no); if(m) n = Math.max(n, Number(m[1])+1); }
+    });
+  }catch(e){}
+  counters[base] = n;
+  try{ storeSet('report_counters', counters); }catch(e){}
+  state.reportNo = base + '-' + String(n).padStart(2,'0');
+  const el = document.getElementById('f_reportNo'); if(el) el.value = state.reportNo;
+  return state.reportNo;
+}
 
 function setStatus(id, statusKey){
   const item = state.items[id];
@@ -774,6 +867,13 @@ function setStatus(id, statusKey){
 
   const showNote = item.status === 'URGENT' || item.status === 'ATTN' || item.status === 'MONITOR';
   document.getElementById('note_'+id).classList.toggle('show', showNote);
+
+  if(!item.status){
+    item.work = '';
+    const wi = document.querySelector('#work_'+id+' input');
+    if(wi) wi.value = '';
+  }
+  refreshWorkUi(id);
 
   renderFindings();
 }
@@ -865,6 +965,7 @@ function renderFindings(){
       <div>
         <div style="font-weight:700;font-size:13.5px;">${f.group} — ${f.label}</div>
         <div style="font-size:13px;color:var(--ink-soft);">${f.note ? f.note : '<i>No note added</i>'}</div>
+        ${f.work && String(f.work).trim() ? `<div style="font-size:13px;color:var(--serv);font-weight:700;">🔧 ${wkEsc(f.work)}</div>` : ''}
       </div>`;
     list.appendChild(card);
   });
@@ -874,7 +975,7 @@ renderFindings();
 
 // ---------- field bindings ----------
 const fieldMap = {f_customer:'customer', f_manufacturer:'manufacturer', f_idno:'idno', f_number:'number',
-  f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer'};
+  f_wll:'wll', f_falls:'falls', f_email:'email', f_customerpin:'customerpin', f_date:'date', f_engineer:'engineer', f_reportNo:'reportNo', f_nextdue:'nextdue'};
 Object.entries(fieldMap).forEach(([elId,key])=>{
   const el = document.getElementById(elId);
   el.value = state[key];
@@ -911,6 +1012,8 @@ function setVisitType(type){
       state.loler.nextexam = d.toISOString().slice(0,10);
       document.getElementById('loler_nextexam').value = state.loler.nextexam;
     }
+    state.nextdue = state.loler.nextexam;
+    document.getElementById('f_nextdue').value = state.nextdue;
     if(!state.loler.signname && state.engineer){ state.loler.signname = state.engineer; document.getElementById('loler_signname').value = state.loler.signname; }
     renderLolerSections();
     restoreSignaturePad();
@@ -952,7 +1055,7 @@ document.querySelectorAll('#equipTypeToggle button').forEach(b=>{
 function lolerSectionText(statusKey){
   const items = Object.values(state.items).filter(i=>i.status===statusKey);
   if(items.length===0) return '';
-  return items.map(f=>`• ${f.group} – ${f.label}${f.note?': '+f.note:' (no note added)'}`).join('\n');
+  return items.map(f=>`• ${f.group} – ${f.label}${f.note?': '+f.note:' (no note added)'}${f.work && String(f.work).trim() ? ' — Work carried out: '+f.work : ''}`).join('\n');
 }
 
 function renderLolerSections(){
@@ -1136,75 +1239,168 @@ async function refreshHistorySelect(){
   idx.slice().reverse().forEach(entry=>{
     const o = document.createElement('option');
     o.value = entry.id;
-    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.number || 'no crane no.'} — ${formatDateUK(entry.date)}`;
+    o.textContent = `${entry.customer || '(unnamed)'} — ${entry.number || 'no crane no.'} — ${formatDateUK(entry.date)}${entry.reportNo ? ' — '+entry.reportNo : ''}`;
     historySelect.appendChild(o);
   });
 }
 refreshHistorySelect();
 
-// ---------- LOLER re-examination reminders ----------
-// Scans every LOLER report saved on this device — this only runs when the
-// app is actually opened, see the chat for what unattended email reminders need.
-async function checkUpcomingLolerReminders(){
-  const idx = await loadReportIndex();
-  const lolerEntries = idx.filter(e => e.visitType === 'LOLER');
+// ---------- due dates: service / inspection / LOLER ----------
+// Every report can carry a "next due" date (LOLER reports use their own
+// "Date of Next Examination"). For each piece of equipment we look only at its
+// MOST RECENT visit of each type, so once a job has been redone the old due
+// date stops nagging.
+const DUE_KIND = {Service:'Service', Inspection:'Inspection', LOLER:'LOLER examination'};
+function dueIsoFor(r){
+  const iso = r.visitType === 'LOLER' ? ((r.loler && r.loler.nextexam) || r.nextdue) : r.nextdue;
+  return wkParse(iso) ? String(iso).slice(0,10) : '';
+}
+function collectDue(){
+  const latest = new Map();
+  eqAllVisits().forEach(v=>{
+    const k = eqKey(v.r) + '|' + (v.r.visitType || 'Service');
+    const prev = latest.get(k);
+    if(!prev || (v.date||'') > (prev.date||'') || ((v.date||'') === (prev.date||'') && v.n >= prev.n)) latest.set(k, v);
+  });
   const today = new Date(); today.setHours(0,0,0,0);
-  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()+30);
-  const due = [];
-  for(const entry of lolerEntries){
-    const full = storeGet('report_'+entry.id);
-    const nextexam = full && full.loler && full.loler.nextexam;
-    if(!nextexam) continue;
-    const dueDate = new Date(nextexam);
-    if(dueDate <= cutoff){
-      due.push({customer: entry.customer, location: full.loler.location, dueDate, overdue: dueDate < today});
+  const out = [];
+  latest.forEach(v=>{
+    const iso = dueIsoFor(v.r); if(!iso) return;
+    out.push({v, r:v.r, kind:v.r.visitType || 'Service', iso, days: Math.round((wkParse(iso) - today)/86400000)});
+  });
+  out.sort((a,b)=> a.days - b.days);
+  return out;
+}
+function dueWindowDays(){ return Number(document.getElementById('dueWindow').value) || 30; }
+function dueTitleFor(d){
+  return `${DUE_KIND[d.kind] || d.kind} due – ${d.r.customer || 'customer'}${d.r.number ? ' – '+d.r.number : ''}`;
+}
+function dueDescFor(d){
+  return `${DUE_KIND[d.kind] || d.kind} due for ${d.r.customer || ''}${d.r.number ? ', crane '+d.r.number : ''}${d.r.idno ? ' (ID '+d.r.idno+')' : ''}. Last visit ${formatDateUK(d.v.date)}${d.r.reportNo ? ' ('+d.r.reportNo+')' : ''}. Open the Key Engineering report app, scan the equipment QR label and start a new report.`;
+}
+
+// .ics calendar file — the phone's own Calendar sets the alerts, so they fire
+// even when this app is closed (30 days before, 7 days before, and on the day, all at 9am)
+function icsEsc(t){ return String(t||'').replace(/\\/g,'\\\\').replace(/;/g,'\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n'); }
+function buildIcs(events){
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');
+  const L = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Key Engineering//Crane Report//EN','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+  events.forEach((e,i)=>{
+    L.push('BEGIN:VEVENT','UID:'+String(e.uid||('ke'+i)).replace(/[^A-Za-z0-9_-]/g,'')+'@keyengineering',
+      'DTSTAMP:'+stamp, 'DTSTART;VALUE=DATE:'+e.iso.replace(/-/g,''), 'DTEND;VALUE=DATE:'+wkAddDays(e.iso,1).replace(/-/g,''),
+      'SUMMARY:'+icsEsc(e.title), 'DESCRIPTION:'+icsEsc(e.desc));
+    [['-P29DT15H','Due in 30 days'],['-P6DT15H','Due in 7 days'],['PT9H','Due today']].forEach(a=>{
+      L.push('BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+icsEsc(e.title+' — '+a[1]),'TRIGGER:'+a[0],'END:VALARM');
+    });
+    L.push('END:VEVENT');
+  });
+  L.push('END:VCALENDAR');
+  return L.join('\r\n');
+}
+async function deliverIcs(events, filename){
+  if(!events.length){ setStatusMsg('Nothing to add to the calendar yet.', 'err'); return; }
+  const file = new File([buildIcs(events)], filename, {type:'text/calendar'});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title: filename});
+      setStatusMsg('Choose Calendar (or Add to Calendar) from the share sheet to save it.', 'ok', 15000);
+      return;
     }
-  }
-  due.sort((a,b)=> a.dueDate - b.dueDate);
+  }catch(e){ if(e.name === 'AbortError') return; }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 2000);
+  setStatusMsg('Calendar file downloaded — open it to add the event(s) to your calendar.', 'ok', 15000);
+}
+
+async function checkUpcomingLolerReminders(){ renderDueDates(); }  // kept under the old name — called after every save
+function renderDueDates(){
   const card = document.getElementById('reminderCard');
   const list = document.getElementById('reminderList');
-  if(due.length === 0){ card.style.display = 'none'; return; }
+  const win = dueWindowDays();
+  const due = collectDue().filter(d=> d.days <= win);
+  try{ if(navigator.setAppBadge){ due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge(); } }catch(e){}
+  if(!due.length){ card.style.display = 'none'; return; }
   card.style.display = 'block';
-  list.innerHTML = due.map(d=>{
-    const days = Math.round((d.dueDate - today)/86400000);
-    const tag = d.overdue ? `<span class="badge urgent" style="position:static;">OVERDUE</span>` : `<span class="badge monitor" style="position:static;">${days} day${days===1?'':'s'} left</span>`;
-    return `<div class="finding-card ${d.overdue?'':'monitor'}" style="align-items:center;">
-      <div style="flex:1;">
-        <div style="font-weight:700;font-size:13.5px;">${d.customer || '(unnamed customer)'}${d.location?' — '+d.location:''}</div>
-        <div style="font-size:12.5px;color:var(--ink-soft);">Next examination due ${formatDateUK(d.dueDate.toISOString().slice(0,10))}</div>
-      </div>
-      ${tag}
-    </div>`;
-  }).join('');
+  const over = due.filter(d=> d.days < 0).length;
+  document.getElementById('dueTitle').textContent = '⏰ Due Dates — ' + (over ? over+' overdue, ' : '') + (due.length-over) + ' coming up';
+  list.innerHTML = '';
+  due.forEach(d=>{
+    const cls = d.days < 0 ? 'urgent' : d.days <= 7 ? 'attn' : 'monitor';
+    const tag = d.days < 0 ? `OVERDUE ${-d.days} day${d.days===-1?'':'s'}` : d.days === 0 ? 'DUE TODAY' : `${d.days} day${d.days===1?'':'s'} left`;
+    const row = document.createElement('div');
+    row.className = 'finding-card ' + (cls==='urgent' ? '' : cls);
+    row.style.cssText = 'flex-direction:column;align-items:stretch;gap:8px;';
+    row.innerHTML = `<div style="display:flex;gap:10px;align-items:center;">
+        <div style="flex:1;">
+          <div style="font-weight:700;font-size:13.5px;">${wkEsc(d.r.customer || '(unnamed customer)')}${d.r.number ? ' — Crane '+wkEsc(d.r.number) : ''}</div>
+          <div style="font-size:12.5px;color:var(--ink-soft);">${wkEsc(DUE_KIND[d.kind] || d.kind)} due ${wkEsc(formatDateUK(d.iso))}</div>
+        </div>
+        <span class="badge ${cls}" style="position:static;white-space:nowrap;">${tag}</span>
+      </div>`;
+    const btns = document.createElement('div'); btns.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    const cal = document.createElement('button'); cal.type='button'; cal.className='btn-ghost'; cal.textContent='📅 Calendar';
+    cal.addEventListener('click', ()=> deliverIcs([{uid:'due'+d.v.id+d.kind, iso:d.iso, title:dueTitleFor(d), desc:dueDescFor(d)}], 'Due_'+(d.r.customer||'job').replace(/[^a-z0-9]+/gi,'_')+'_'+d.iso+'.ics'));
+    btns.appendChild(cal);
+    if(!Array.isArray(d.r.items)){
+      const go = document.createElement('button'); go.type='button'; go.className='btn-ghost'; go.textContent='▶ Start report';
+      go.addEventListener('click', ()=>{ startFromScannedReport(d.r); setVisitType(d.kind); });
+      btns.appendChild(go);
+    }
+    row.appendChild(btns);
+    list.appendChild(row);
+  });
 }
-checkUpcomingLolerReminders();
+try{ document.getElementById('dueWindow').value = String(storeGet('due_window') || 30); }catch(e){}
+document.getElementById('dueWindow').addEventListener('change', ()=>{ try{ storeSet('due_window', dueWindowDays()); }catch(e){} renderDueDates(); });
+window.addEventListener('load', ()=>{ try{ renderDueDates(); }catch(e){} });
+
+document.getElementById('btnDueCalAll').addEventListener('click', ()=>{
+  const due = collectDue().filter(d=> d.days <= dueWindowDays() || true); // everything upcoming, not just the shown window
+  deliverIcs(due.filter(d=> d.days >= -30).map(d=>({uid:'due'+d.v.id+d.kind, iso:d.iso, title:dueTitleFor(d), desc:dueDescFor(d)})), 'Key_Engineering_due_dates.ics');
+});
 
 const reminderEmailInput = document.getElementById('reminderEmail');
 reminderEmailInput.value = storeGet('reminder_email') || '';
 reminderEmailInput.addEventListener('input', ()=> storeSet('reminder_email', reminderEmailInput.value));
 
-document.getElementById('btnEmailReminders').addEventListener('click', async ()=>{
-  const idx = await loadReportIndex();
-  const lolerEntries = idx.filter(e => e.visitType === 'LOLER');
-  const today = new Date(); today.setHours(0,0,0,0);
-  const cutoff = new Date(today); cutoff.setDate(cutoff.getDate()+30);
-  const lines = [];
-  for(const entry of lolerEntries){
-    const full = storeGet('report_'+entry.id);
-    const nextexam = full && full.loler && full.loler.nextexam;
-    if(!nextexam) continue;
-    const dueDate = new Date(nextexam);
-    if(dueDate <= cutoff){
-      lines.push(`- ${entry.customer||'(unnamed)'}${full.loler.location?' — '+full.loler.location:''}: due ${formatDateUK(nextexam)}${dueDate<today?' (OVERDUE)':''}`);
-    }
-  }
-  if(lines.length===0){ setStatusMsg('Nothing due within 30 days.', 'ok'); return; }
+document.getElementById('btnEmailReminders').addEventListener('click', ()=>{
+  const win = dueWindowDays();
+  const due = collectDue().filter(d=> d.days <= win);
+  if(!due.length){ setStatusMsg('Nothing due within '+win+' days.', 'ok'); return; }
   const to = reminderEmailInput.value.trim();
-  if(!to){ setStatusMsg('Add your email address above first.', 'err'); return; }
-  const subject = 'LOLER re-examinations due soon';
-  const body = 'Equipment due for LOLER thorough examination within 30 days:\n\n' + lines.join('\n');
+  if(!to){ setStatusMsg('Add your email address in the box above first.', 'err'); return; }
+  const lines = due.map(d=> `- ${d.r.customer||'(unnamed)'}${d.r.number?' — Crane '+d.r.number:''}: ${DUE_KIND[d.kind]||d.kind} due ${formatDateUK(d.iso)}${d.days<0?' (OVERDUE '+(-d.days)+' days)':' ('+d.days+' days)'}`);
+  const subject = 'Key Engineering — work due within '+win+' days';
+  const body = 'Services, inspections and LOLER examinations due within '+win+' days:\n\n' + lines.join('\n');
   window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  setStatusMsg('Opening your mail app with the reminder list.', 'ok');
+  setStatusMsg('Opening your mail app with the list.', 'ok');
+});
+
+// next-due field: quick buttons, LOLER sync, calendar
+function setNextDue(iso){
+  state.nextdue = iso;
+  document.getElementById('f_nextdue').value = iso;
+  if(state.visitType === 'LOLER'){ state.loler.nextexam = iso; document.getElementById('loler_nextexam').value = iso; }
+}
+document.querySelectorAll('#dueQuick button').forEach(b=> b.addEventListener('click', ()=>{
+  const d = wkParse(state.date) || new Date();
+  d.setMonth(d.getMonth() + Number(b.dataset.m));
+  setNextDue(wkIso(d));
+  setStatusMsg('Next due date set to '+formatDateUK(state.nextdue)+'.', 'ok');
+}));
+document.getElementById('f_nextdue').addEventListener('input', ()=>{
+  if(state.visitType === 'LOLER'){ state.loler.nextexam = state.nextdue; document.getElementById('loler_nextexam').value = state.nextdue; }
+});
+document.getElementById('loler_nextexam').addEventListener('input', ()=>{
+  state.nextdue = state.loler.nextexam || '';
+  document.getElementById('f_nextdue').value = state.nextdue;
+});
+document.getElementById('btnDueCal').addEventListener('click', ()=>{
+  if(!wkParse(state.nextdue)){ setStatusMsg('Set a next due date first (or tap 3 / 6 / 12 months).', 'err'); return; }
+  const d = {kind:state.visitType, r:state, v:{id:'cur',date:state.date}, iso:state.nextdue};
+  deliverIcs([{uid:'due'+(state.reportNo||Date.now())+state.visitType, iso:state.nextdue, title:dueTitleFor(d), desc:dueDescFor(d)}], 'Due_'+(state.customer||'job').replace(/[^a-z0-9]+/gi,'_')+'_'+state.nextdue+'.ics');
 });
 
 historySelect.addEventListener('change', async ()=>{
@@ -1219,6 +1415,8 @@ historySelect.addEventListener('change', async ()=>{
 
 function applyState(loaded){
   state = loaded;
+  if(state.reportNo === undefined) state.reportNo = '';
+  if(state.nextdue === undefined) state.nextdue = '';
   if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'};
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
@@ -1236,6 +1434,10 @@ function applyState(loaded){
     document.getElementById('note_'+id).classList.remove('show');
     const noteInput = document.getElementById('note_'+id).querySelector('input');
     noteInput.value = it.note || '';
+    const workInput = document.querySelector('#work_'+id+' input');
+    if(workInput) workInput.value = it.work || '';
+    const workWrapEl = document.getElementById('work_'+id);
+    if(workWrapEl) workWrapEl.classList.remove('show');
     if(it.status){
       const target = it.status;
       state.items[id].status = null; // setStatus toggles, so clear first then apply once
@@ -1245,30 +1447,33 @@ function applyState(loaded){
     state.items[id].photo = it.photo || null;
     const photoContainer = document.getElementById('photo_'+id);
     if(photoContainer) renderPhotoRow(id, photoContainer);
+    refreshWorkUi(id);
   });
   updateTopbarSub();
 }
 
 // ---------- status message ----------
 let statusTimer;
-function setStatusMsg(msg, type){
+function setStatusMsg(msg, type, ms){
   const el = document.getElementById('statusMsg');
   el.textContent = msg;
   el.className = 'status-msg no-print' + (type ? ' '+type : '');
   clearTimeout(statusTimer);
-  statusTimer = setTimeout(()=>{ el.textContent=''; el.className='status-msg no-print'; }, 6000);
+  statusTimer = setTimeout(()=>{ el.textContent=''; el.className='status-msg no-print'; }, ms || 6000);
 }
 
 // ---------- save report ----------
 async function saveReport(){
   if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
+  assignReportNo();
   const reportId = Date.now().toString();
   try{
     storeSet('report_'+reportId, state);
     const idx = await loadReportIndex();
-    idx.push({id:reportId, customer:state.customer, idno:state.idno, number:state.number, date:state.date, visitType:state.visitType});
+    idx.push({id:reportId, customer:state.customer, idno:state.idno, number:state.number, date:state.date, visitType:state.visitType, reportNo:state.reportNo});
     storeSet('report_index', idx);
     await refreshHistorySelect();
+    try{ renderEqResults(); }catch(e){ /* history is a bonus — never block a save */ }
     await checkUpcomingLolerReminders();
     try{ wkRender(); }catch(e){ /* weekly list is a bonus — never block a save */ }
     try{ syncAfterSave({id:reportId, r:state}); }catch(e){ /* sync must never block a save */ }
@@ -1285,17 +1490,127 @@ document.getElementById('btnSave').addEventListener('click', async ()=>{
 function freshState(keepEngineer){
   const items = {};
   ITEM_IDS.forEach(id=>{
-    items[id] = {status:null, note:'', photo:null, label: state.items[id].label, group: state.items[id].group};
+    items[id] = {status:null, note:'', work:'', photo:null, label: state.items[id].label, group: state.items[id].group};
   });
   return {
     customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
-    visitType:'Service', notes:'',
+    visitType:'Service', notes:'', reportNo:'', nextdue:'',
     loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
     items
   };
 }
+
+// ---------- equipment history ----------
+// One timeline per piece of equipment (customer + crane no. + ID no.), built from
+// every report on this device — including ones added from other phones.
+function eqKey(r){ return [r.customer, r.number, r.idno].map(v=>String(v||'').trim().toLowerCase()).join('|'); }
+function eqAllVisits(){
+  const best = new Map();
+  wkAllReports().forEach(x=>{
+    const r = x.r; if(!r) return;
+    const key = r.reportNo ? 'no:'+r.reportNo : 'k:'+wkKey(x);
+    const cand = {id:x.id, r, src:x.src, date:wkReportDate(x), n:Number(String(x.id).replace(/^imp_/,''))||0};
+    const prev = best.get(key);
+    if(!prev || (cand.src==='local' && prev.src!=='local') || (cand.src===prev.src && cand.n >= prev.n)) best.set(key, cand);
+  });
+  return [...best.values()];
+}
+function eqGroups(query){
+  const q = String(query||'').trim().toLowerCase();
+  const tokens = q ? q.split(/\s+/) : [];
+  const groups = new Map();
+  eqAllVisits().forEach(v=>{
+    const r = v.r;
+    const hay = [r.customer, r.number, r.idno, r.manufacturer, r.reportNo].join(' ').toLowerCase();
+    if(!tokens.every(t=> hay.includes(t))) return;
+    const k = eqKey(r);
+    if(!groups.has(k)) groups.set(k, {key:k, customer:r.customer||'', number:r.number||'', idno:r.idno||'', visits:[]});
+    groups.get(k).visits.push(v);
+  });
+  const out = [...groups.values()];
+  out.forEach(g=> g.visits.sort((a,b)=> (b.date||'').localeCompare(a.date||'') || b.n - a.n));
+  out.sort((a,b)=> (b.visits[0].date||'').localeCompare(a.visits[0].date||''));
+  return out;
+}
+function eqLabel(g){
+  return (g.customer||'(unnamed)') + ' — ' + (g.number ? 'Crane '+g.number : 'no crane no.') + (g.idno ? ' (ID '+g.idno+')' : '');
+}
+function renderEqResults(){
+  const box = document.getElementById('eqResults');
+  const tl = document.getElementById('eqTimeline');
+  if(!box || !tl) return;
+  const q = document.getElementById('eqSearch').value;
+  const groups = eqGroups(q);
+  box.innerHTML = ''; tl.innerHTML = '';
+  if(!groups.length){
+    box.innerHTML = '<p class="finding-empty">' + (q.trim() ? 'Nothing found for that search.' : 'No saved reports yet — history builds up as you save reports.') + '</p>';
+    return;
+  }
+  if(groups.length === 1 && q.trim()){ renderEqTimeline(groups[0]); return; }
+  groups.slice(0,30).forEach(g=>{
+    const last = g.visits[0];
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn-ghost';
+    b.style.cssText = 'display:block;width:100%;text-align:left;margin-bottom:6px;';
+    b.innerHTML = `<div style="font-weight:700;">${wkEsc(eqLabel(g))}</div><div style="font-size:12px;font-weight:400;color:var(--ink-soft);">${g.visits.length} visit${g.visits.length===1?'':'s'} · last ${wkEsc(formatDateUK(last.date))} (${wkEsc(last.r.visitType||'Service')})</div>`;
+    b.addEventListener('click', ()=> renderEqTimeline(g));
+    box.appendChild(b);
+  });
+  if(groups.length > 30){ const m = document.createElement('p'); m.className='note-inline'; m.textContent = 'Showing the 30 most recent — type to narrow it down.'; box.appendChild(m); }
+}
+function renderEqTimeline(g){
+  const box = document.getElementById('eqTimeline');
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.innerHTML = `<div style="font-weight:800;font-size:15px;margin:14px 0 2px;">${wkEsc(eqLabel(g))}</div><p class="note-inline" style="margin:0 0 4px;">${g.visits.length} visit${g.visits.length===1?'':'s'} on record, newest first.</p>`;
+  box.appendChild(head);
+  g.visits.forEach(v=>{
+    const r = v.r;
+    const items = wkItems(r).filter(Boolean);
+    const flagged = items.filter(i=> WK_RANK[i.status] !== undefined);
+    const otherWork = items.filter(i=> WK_RANK[i.status] === undefined && i.work && String(i.work).trim());
+    const card = document.createElement('div');
+    card.className = 'finding-card';
+    card.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;margin-top:8px;';
+    let html = `<div style="font-weight:800;font-size:13.5px;">${wkEsc(formatDateUK(v.date))} · ${wkEsc(r.visitType||'Service')}${r.reportNo ? ' · '+wkEsc(r.reportNo) : ''}</div>`;
+    html += `<div style="font-size:12px;color:var(--ink-soft);">Engineer: ${wkEsc(r.engineer||'—')}</div>`;
+    flagged.forEach(i=>{
+      const b = WK_BADGE[i.status];
+      html += `<div style="font-size:13px;"><span class="badge ${b[0]}">${b[1]}</span> <b>${wkEsc(i.group)} — ${wkEsc(i.label)}</b>${i.note ? ': '+wkEsc(i.note) : ''}`;
+      if(i.work && String(i.work).trim()) html += `<div style="color:var(--serv);font-weight:700;">🔧 ${wkEsc(i.work)}</div>`;
+      html += `</div>`;
+    });
+    otherWork.forEach(i=>{
+      html += `<div style="font-size:13px;color:var(--serv);font-weight:700;">🔧 ${wkEsc(i.group)} — ${wkEsc(i.label)}: ${wkEsc(i.work)}</div>`;
+    });
+    if(!flagged.length && !otherWork.length) html += `<div style="font-size:12.5px;color:var(--ink-soft);">Nothing flagged on this visit.</div>`;
+    if(r.notes && String(r.notes).trim()){
+      const n = String(r.notes).trim();
+      html += `<div style="font-size:12.5px;color:var(--ink-soft);">Notes: ${wkEsc(n.length>300 ? n.slice(0,300)+'…' : n)}</div>`;
+    }
+    card.innerHTML = html;
+    if(!Array.isArray(r.items)){
+      const pb = document.createElement('button');
+      pb.type = 'button'; pb.className = 'btn-ghost'; pb.style.alignSelf = 'flex-start';
+      pb.textContent = '👁️ View this report (PDF)';
+      pb.addEventListener('click', ()=> viewScannedReportPdf(r));
+      card.appendChild(pb);
+    }
+    box.appendChild(card);
+  });
+}
+function showEquipHistory(customer, number, idno){
+  const input = document.getElementById('eqSearch');
+  input.value = [customer, number].filter(Boolean).join(' ');
+  renderEqResults();
+  const g = eqGroups('').find(x=> x.key === eqKey({customer, number, idno}));
+  if(g) renderEqTimeline(g);
+  document.getElementById('equipHistoryCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+document.getElementById('eqSearch').addEventListener('input', renderEqResults);
+window.addEventListener('load', ()=>{ try{ renderEqResults(); }catch(e){} });
 
 // ---------- scan previous report (QR) ----------
 let scanStream = null, scanRAF = null;
@@ -1394,6 +1709,11 @@ function handleScannedPayload(text){
   startBtn.textContent = '✅ Start New Report From This';
   startBtn.addEventListener('click', ()=> startFromScannedReport(r));
   btnRow.appendChild(viewBtn); btnRow.appendChild(startBtn);
+  const histBtn = document.createElement('button');
+  histBtn.type = 'button'; histBtn.className = 'action-btn outline'; histBtn.style.flex = '1 1 100%';
+  histBtn.textContent = '🕘 View Equipment History';
+  histBtn.addEventListener('click', ()=> showEquipHistory(r.customer||'', r.number||'', r.idno||''));
+  btnRow.appendChild(histBtn);
   box.appendChild(btnRow);
 }
 
@@ -1485,9 +1805,10 @@ function renderCarryForwardPanel(r){
         if(input){ input.value = resolvedNote; state.items[id].note = resolvedNote; }
         noteWrap.classList.add('show');
       }
+      openWork(id);
       row.style.opacity = '0.55';
       stillBtn.disabled = true; fixedBtn.disabled = true;
-      setStatusMsg('Marked as fixed.', 'ok');
+      setStatusMsg('Marked as fixed — add what was done in the "Work carried out" box on that checklist item.', 'ok', 12000);
     });
     btns.appendChild(stillBtn); btns.appendChild(fixedBtn);
     row.appendChild(btns);
@@ -1519,6 +1840,7 @@ document.getElementById('btnPrint').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnPrint');
   btn.disabled = true; btn.textContent = 'Preparing…';
   try{
+    assignReportNo();
     const doc = state.visitType === 'LOLER' ? await buildLolerPdfBlob() : await buildPdfBlob();
     const blobUrl = doc.output('bloburl');
     const w = window.open(blobUrl, '_blank');
@@ -1632,6 +1954,8 @@ async function buildPdfBlob(){
     doc.addImage(LOGO_DATA_URI, 'PNG', margin, 14, logoW, logoH);
     doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(15);
     doc.text('Crane Service Report', margin+logoW+16, 38);
+    if(state.reportNo){ doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(245,184,0); doc.text('Report No: '+state.reportNo + (state.nextdue ? '     Next due: '+formatDateUK(state.nextdue) : ''), margin+logoW+16, 54); }
+    else if(state.nextdue){ doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(245,184,0); doc.text('Next due: '+formatDateUK(state.nextdue), margin+logoW+16, 54); }
   }catch(e){
     doc.setTextColor(245,184,0); doc.setFont('helvetica','bold'); doc.setFontSize(9);
     doc.text('KEY ENGINEERING (CHESTERFIELD) LTD', margin, 24);
@@ -1693,12 +2017,14 @@ async function buildPdfBlob(){
     doc.text(g.group.toUpperCase(), margin, y); y += 10;
     g.items.forEach(label=>{
       const id = slug(g.group)+'__'+slug(label);
-      const it = state.items[id];
+      const it = state.items[id] || {status:null, note:'', photo:null};
       const c = it.status ? statusColor(it.status) : [220,224,228];
       let noteText = (it.note||'').trim();
       if(it.photo) noteText += (noteText ? ' ' : '') + '[photo attached]';
       const noteLines = noteText ? doc.splitTextToSize(noteText, findingColW) : [];
-      const rowHeight = rowH * Math.max(1, noteLines.length);
+      const workText = (it.work||'').trim() ? 'Work done: '+String(it.work).trim() : '';
+      const workLines = workText ? doc.splitTextToSize(workText, findingColW) : [];
+      const rowHeight = rowH * Math.max(1, noteLines.length + workLines.length);
       if(y + rowHeight > bottomLimit){ newPage(doc); y = margin; }
 
       doc.setFont('helvetica','normal'); doc.setFontSize(7.6); doc.setTextColor(65,70,77);
@@ -1709,6 +2035,10 @@ async function buildPdfBlob(){
       if(noteLines.length){
         doc.setFont('helvetica','italic'); doc.setTextColor(90,95,102);
         noteLines.forEach((line,i)=>{ doc.text(line, findingColX, y + i*rowH); });
+      }
+      if(workLines.length){
+        doc.setFont('helvetica','bolditalic'); doc.setFontSize(7); doc.setTextColor(28,120,60);
+        workLines.forEach((line,i)=>{ doc.text(line, findingColX, y + (noteLines.length+i)*rowH); });
       }
       y += rowHeight;
     });
@@ -1763,6 +2093,7 @@ document.getElementById('btnPdf').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnPdf');
   btn.disabled = true; btn.textContent = 'Building PDF…';
   try{
+    assignReportNo();
     const pdf = await buildPdfBlob();
     pdf.save(reportFilename());
     setStatusMsg('PDF downloaded.', 'ok');
@@ -1829,6 +2160,7 @@ async function buildLolerPdfBlob(){
   ty += 2;
   doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(BRAND_BLUE[0],BRAND_BLUE[1],BRAND_BLUE[2]);
   doc.text('EQUIPMENT TYPE: '+equipmentTypeLabel(state.loler.equipmentType).toUpperCase(), titleX, ty);
+  if(state.reportNo){ ty += 12; doc.text('REPORT NO: '+state.reportNo, titleX, ty); }
   // the accent bar sits below whichever is taller — the logo or the title
   // text (which wraps to a different number of lines depending on content) —
   // using only the logo's height here was the bug: on longer wraps the text
@@ -1969,6 +2301,7 @@ document.getElementById('btnLoler').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnLoler');
   btn.disabled = true; btn.textContent = 'Building LOLER report…';
   try{
+    assignReportNo();
     const pdf = await buildLolerPdfBlob();
     pdf.save(lolerFilename());
     setStatusMsg(state.loler.signature ? 'LOLER report downloaded.' : 'LOLER report downloaded — note it has no signature yet, sign in the box above before sending it out.', 'ok');
@@ -1984,7 +2317,7 @@ function findingsSummaryText(){
   const findings = Object.values(state.items).filter(i => i.status==='URGENT' || i.status==='ATTN' || i.status==='MONITOR');
   if(findings.length===0) return 'No urgent repairs, attention items, or monitor flags were noted during this visit.';
   const labelFor = k => k==='URGENT' ? 'URGENT REPAIR' : k==='ATTN' ? "REQ'S ATTENTION" : 'MONITOR';
-  return findings.map(f=>`- [${labelFor(f.status)}] ${f.group} – ${f.label}${f.note?': '+f.note:''}`).join('\n');
+  return findings.map(f=>`- [${labelFor(f.status)}] ${f.group} – ${f.label}${f.note?': '+f.note:''}${f.work && String(f.work).trim() ? ' (Work carried out: '+f.work+')' : ''}`).join('\n');
 }
 
 // ---------- Email customer (opens the default mail app, pre-filled) ----------
@@ -2001,6 +2334,7 @@ function reportPlainText(full){
       })();
   return [
     `Crane Service Report`,
+    `Report no: ${state.reportNo||'—'}`,
     `Customer: ${state.customer||'—'}`,
     `Crane / ID No: ${state.idno || 'n/a'} (${state.manufacturer||'n/a'})`,
     `Type of visit: ${state.visitType}`,
@@ -2020,7 +2354,8 @@ function reportPlainText(full){
 document.getElementById('btnEmail').addEventListener('click', async ()=>{
   if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
   const btn = document.getElementById('btnEmail');
-  const subject = `Crane Service Report – ${state.customer} – ${state.date}`;
+  assignReportNo();
+  const subject = `Crane Service Report – ${state.customer} – ${state.date}${state.reportNo ? ' – '+state.reportNo : ''}`;
 
   // Try to actually attach the PDF via the device's native share sheet — this is
   // the only route a website has to hand a real file to the Mail app. It can't
@@ -2035,8 +2370,8 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
 
     if(navigator.canShare && navigator.canShare({files:[file]})){
       navigator.clipboard && navigator.clipboard.writeText(state.email).catch(()=>{});
-      await navigator.share({ files:[file], title: subject, text: reportPlainText(false) });
-      setStatusMsg('Choose Mail from the share sheet — the PDF is already attached. Paste '+state.email+' into "To" (already copied for you).', 'ok');
+      setStatusMsg('📋 '+state.email+' is copied — in Mail, tap the "To" box and choose Paste.', 'ok', 30000);
+      await navigator.share({ files:[file], title: subject, text: 'SEND TO: '+state.email+'  (copy it into the "To" box, then delete this line)\n\n' + reportPlainText(false) });
     } else {
       throw new Error('SHARE_UNSUPPORTED');
     }
@@ -2078,6 +2413,7 @@ document.getElementById('btnOnedrive').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnOnedrive');
   btn.disabled = true; btn.textContent = 'Preparing…';
   try{
+    assignReportNo();
     const pdf = await buildPdfBlob();
     let uploaded = false;
     if(syncReady()){
@@ -2379,7 +2715,7 @@ function wkExportReport(x){
   const r = x.r || {};
   const loler = r.loler || {};
   return {
-    id:x.id, customer:r.customer||'', email:r.email||'', idno:r.idno||'', number:r.number||'',
+    id:x.id, reportNo:r.reportNo||'', nextdue:r.nextdue||'', customer:r.customer||'', email:r.email||'', idno:r.idno||'', number:r.number||'',
     manufacturer:r.manufacturer||'', wll:r.wll||'', falls:r.falls||'',
     date:wkReportDate(x), engineer:r.engineer||'', visitType:r.visitType||'Service', notes:r.notes||'',
     loler:{
@@ -2389,7 +2725,7 @@ function wkExportReport(x){
       signname:loler.signname||'', equipmentType:loler.equipmentType||'CRANE', hasSignature:!!loler.signature
     },
     items: wkItems(r).filter(Boolean).map(it=>({
-      status:it.status||null, group:it.group||'', label:it.label||'', note:it.note||'', hasPhoto:!!(it.photo || it.hasPhoto)
+      status:it.status||null, group:it.group||'', label:it.label||'', note:it.note||'', work:it.work||'', hasPhoto:!!(it.photo || it.hasPhoto)
     }))
   };
 }
@@ -2432,6 +2768,8 @@ function wkSanitize(j){
     const loler = r.loler || {};
     incoming.push({
       id: wkClean(r.id,20) || String(Date.now()),
+      reportNo: wkClean(r.reportNo,40),
+      nextdue: wkParse(r.nextdue) ? String(r.nextdue).slice(0,10) : '',
       customer: wkClean(r.customer,120), email: wkClean(r.email,120), idno: wkClean(r.idno,60),
       number: wkClean(r.number,60), manufacturer: wkClean(r.manufacturer,60),
       wll: wkClean(r.wll,40), falls: wkClean(r.falls,40),
@@ -2448,7 +2786,7 @@ function wkSanitize(j){
         hasSignature: !!loler.hasSignature
       },
       items: wkArr(r.items).slice(0,300).filter(it=> it && (it.status==null || WK_RANK[it.status]!==undefined || it.status==='SERV' || it.status==='NA')).map(it=>({
-        status: it.status||null, group:wkClean(it.group,60), label:wkClean(it.label,80), note:wkClean(it.note,2000), hasPhoto:!!it.hasPhoto
+        status: it.status||null, group:wkClean(it.group,60), label:wkClean(it.label,80), note:wkClean(it.note,2000), work:wkClean(it.work,2000), hasPhoto:!!it.hasPhoto
       }))
     });
   });
@@ -2464,11 +2802,11 @@ function wkPromoteToLocalReport(rep){
   (rep.items||[]).forEach(it=>{
     if(!it || !it.label) return;
     const id = slug(it.group||'')+'__'+slug(it.label||'');
-    items[id] = {status: it.status||null, note: it.note||'', photo: null, label: it.label||'', group: it.group||''};
+    items[id] = {status: it.status||null, note: it.note||'', work: it.work||'', photo: null, label: it.label||'', group: it.group||''};
   });
   const loler = rep.loler || {};
   const full = {
-    customer:rep.customer||'', manufacturer:rep.manufacturer||'', idno:rep.idno||'', number:rep.number||'',
+    reportNo:rep.reportNo||'', nextdue:rep.nextdue||'', customer:rep.customer||'', manufacturer:rep.manufacturer||'', idno:rep.idno||'', number:rep.number||'',
     wll:rep.wll||'', falls:rep.falls||'', email:rep.email||'', date:rep.date||'', engineer:rep.engineer||'',
     visitType:rep.visitType||'Service', notes:rep.notes||'',
     loler:{
@@ -2483,7 +2821,7 @@ function wkPromoteToLocalReport(rep){
   storeSet('report_'+reportId, full);
   const idx = wkArr(storeGet('report_index'));
   if(!idx.some(e=>e && e.id===reportId)){
-    idx.push({id:reportId, customer:full.customer, idno:full.idno, number:full.number, date:full.date, visitType:full.visitType});
+    idx.push({id:reportId, customer:full.customer, idno:full.idno, number:full.number, date:full.date, visitType:full.visitType, reportNo:full.reportNo});
     storeSet('report_index', idx);
   }
   return reportId;

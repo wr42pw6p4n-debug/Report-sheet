@@ -313,6 +313,16 @@
     <p class="report-sub" id="topbarSub">New report — not yet saved</p>
   </div>
 
+  <!-- iPad ALERT SETUP -->
+  <div class="no-print" id="alertSetup" style="margin:10px 0; padding:10px 12px; border:1.5px dashed var(--steel-700); border-radius:10px; background:#fff;">
+    <div id="alertMsg" style="font-size:13px;"></div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button class="btn-ghost" id="btnAlertOn" type="button">🔔 Turn on iPad alerts</button>
+      <button class="btn-ghost" id="btnAlertTest" type="button" style="display:none;">Send a test alert</button>
+      <button class="btn-ghost" id="btnAlertOff" type="button" style="display:none;">Turn off</button>
+    </div>
+  </div>
+
   <!-- DUE DATES (services, inspections, LOLER) -->
   <div class="section no-print" id="reminderCard" style="display:none;">
     <div class="section-head"><div class="section-tag" style="background:var(--urgent);"></div><h2 id="dueTitle">⏰ Due Dates</h2></div>
@@ -1345,6 +1355,7 @@ const NOTIF_CATS = [
   {key:'Service',    icon:'🛠️', label:'Service due'},
   {key:'Inspection', icon:'🔍', label:'Inspection due'}
 ];
+let alertSummary = {attention:0, title:'', body:''}, alertAnnounced = false;
 let notifOpen = null, notifLimit = 25, notifFilter = '', notifData = {due:[], rep:{open:[], done:[]}};
 
 // outstanding repairs = for each item on each piece of equipment, look at the MOST RECENT
@@ -1528,6 +1539,13 @@ function renderDueDates(){
   due.forEach(d=>{ counts[d.kind] = (counts[d.kind]||0) + 1; if(d.days < 0) overdue[d.kind] = (overdue[d.kind]||0) + 1; });
   const urgentRepairs = rep.open.filter(x=> x.it.status === 'URGENT').length;
   const attention = counts.repairs + due.length;
+  const sumLines = [];
+  if(counts.repairs) sumLines.push(`🔧 ${counts.repairs} repair${counts.repairs===1?'':'s'} outstanding${urgentRepairs ? ' ('+urgentRepairs+' urgent)' : ''}`);
+  [['LOLER','📋 LOLER'],['Service','🛠️ Service'],['Inspection','🔍 Inspection']].forEach(([k,l])=>{
+    if(counts[k]) sumLines.push(`${l} due: ${counts[k]}${overdue[k] ? ' ('+overdue[k]+' overdue)' : ''}`);
+  });
+  alertSummary = {attention, title:`Key Engineering — ${attention} need attention`, body:sumLines.join('\n')};
+  if(!alertAnnounced){ alertAnnounced = true; if(attention && alertWanted()) alertShow(alertSummary.title, alertSummary.body).catch(()=>{}); }
   try{ if(navigator.setAppBadge){ attention ? navigator.setAppBadge(attention) : navigator.clearAppBadge(); } }catch(e){}
   const total = attention + counts.done;
   if(!total){ card.style.display = 'none'; return; }
@@ -1550,6 +1568,62 @@ function renderDueDates(){
   });
   renderNotifPanel();
 }
+// ---- alert on this iPad each time the app is opened ----
+// Needs the app added to the Home Screen (iPadOS 16.4+) and a small helper file, sw.js,
+// next to index.html. The notification is raised by the app itself when it opens.
+const ALERT_OK = ('serviceWorker' in navigator) && ('Notification' in window);
+function alertWanted(){ try{ return ALERT_OK && Notification.permission === 'granted' && storeGet('alerts_on') === true; }catch(e){ return false; } }
+async function alertShow(title, body){
+  await navigator.serviceWorker.register('sw.js');
+  const reg = await navigator.serviceWorker.ready;
+  await reg.showNotification(title, {body, tag:'ke-due', icon:'icon-180.png'});
+  try{ if(navigator.setAppBadge && alertSummary.attention) navigator.setAppBadge(alertSummary.attention); }catch(e){}
+}
+function refreshAlertUi(){
+  const msg = document.getElementById('alertMsg');
+  const on = document.getElementById('btnAlertOn'), test = document.getElementById('btnAlertTest'), off = document.getElementById('btnAlertOff');
+  on.style.display = test.style.display = off.style.display = 'none';
+  if(!ALERT_OK){
+    msg.innerHTML = '🔔 To get an alert on your iPad when you open the app, add it to your Home Screen (Share ▸ Add to Home Screen) and open it from that icon.';
+    return;
+  }
+  if(Notification.permission === 'denied'){
+    msg.innerHTML = '🔕 Alerts are blocked for this app. Turn them on in iPad Settings ▸ Notifications ▸ Key Engineering (or the app’s name).';
+    return;
+  }
+  if(alertWanted()){
+    msg.innerHTML = '🔔 <b>iPad alerts are on</b> — you’ll get a notification each time you open the app and something needs attention.';
+    test.style.display = off.style.display = '';
+  } else {
+    msg.innerHTML = '🔔 Get a notification on this iPad each time you open the app and something is due or needs repairing.';
+    on.style.display = '';
+  }
+}
+document.getElementById('btnAlertOn').addEventListener('click', async ()=>{
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm === 'granted'){
+      storeSet('alerts_on', true);
+      await alertShow('Key Engineering', 'Alerts are on. You’ll get one like this each time you open the app and something needs attention.');
+      setStatusMsg('iPad alerts turned on.', 'ok');
+    } else {
+      setStatusMsg('Alerts weren’t allowed. You can change this in iPad Settings ▸ Notifications.', 'err', 12000);
+    }
+  }catch(e){ setStatusMsg('Could not turn on alerts: '+e.message, 'err', 12000); }
+  refreshAlertUi();
+});
+document.getElementById('btnAlertTest').addEventListener('click', async ()=>{
+  try{
+    await alertShow(alertSummary.attention ? alertSummary.title : 'Key Engineering', alertSummary.attention ? alertSummary.body : 'Test alert — alerts are working. Nothing needs attention right now.');
+    setStatusMsg('Test alert sent — check the top of the screen or Notification Centre.', 'ok', 10000);
+  }catch(e){ setStatusMsg('Could not send the alert: '+e.message, 'err', 12000); }
+});
+document.getElementById('btnAlertOff').addEventListener('click', ()=>{
+  try{ storeSet('alerts_on', false); }catch(e){}
+  refreshAlertUi();
+});
+refreshAlertUi();
+
 try{ document.getElementById('dueWindow').value = String(storeGet('due_window') || 30); }catch(e){}
 document.getElementById('dueWindow').addEventListener('change', ()=>{ try{ storeSet('due_window', dueWindowDays()); }catch(e){} renderDueDates(); });
 window.addEventListener('load', ()=>{ try{ renderDueDates(); }catch(e){} });

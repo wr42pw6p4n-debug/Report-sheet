@@ -15,7 +15,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <style>
   :root{
     --steel-900:#161b22;
@@ -136,6 +135,26 @@
     color:var(--steel-800); font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap;
   }
   .btn-ghost:hover{background:var(--steel-100);}
+
+
+  /* engineers' chat */
+  .chat-row{display:block; width:100%; text-align:left; background:#fff; border:1.5px solid var(--line); border-radius:8px; padding:9px 12px; margin-bottom:8px; cursor:pointer; font:inherit; color:var(--ink);}
+  .chat-row:hover{background:var(--steel-100);}
+  .chat-row.unread{border-color:var(--urgent); background:#fff6f6;}
+  .chat-row .ct{font-weight:700; font-size:14px; display:flex; gap:8px; align-items:center;}
+  .chat-row .cs{font-size:12.5px; color:var(--ink-soft); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chat-row .cm{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+  .chat-dot{background:var(--urgent); color:#fff; font-size:11px; font-weight:700; border-radius:10px; padding:1px 7px;}
+  .chat-solved{background:var(--serv); color:#fff; font-size:11px; font-weight:700; border-radius:10px; padding:1px 7px;}
+  .chat-msgs{max-height:55vh; overflow-y:auto; padding:4px 2px; margin:8px 0;}
+  .chat-b{max-width:85%; margin:0 0 8px; padding:8px 11px; border-radius:12px; background:var(--steel-100); font-size:14px; line-height:1.4; word-wrap:break-word; white-space:pre-wrap;}
+  .chat-b.me{margin-left:auto; background:#dbeafe;}
+  .chat-b .cn{font-size:11px; font-weight:700; color:var(--ink-soft); display:block; margin-bottom:2px;}
+  .chat-b .cw{font-size:10.5px; color:var(--ink-soft); display:block; margin-top:3px; text-align:right;}
+  .chat-b img{max-width:220px; max-height:220px; border-radius:8px; display:block; margin-top:4px; cursor:zoom-in;}
+  .chat-b img.big{max-width:100%; max-height:none; cursor:zoom-out;}
+  .chat-compose textarea, #chatNewForm textarea{width:100%; min-height:60px; padding:9px; border:1.5px solid var(--line); border-radius:7px; font:inherit; font-size:14px; resize:vertical;}
+  #chatNewForm input[type=text]{width:100%;}
 
   /* legend */
   .legend{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
@@ -341,18 +360,89 @@
     </div>
   </div>
 
-  <!-- TEAM SYNC (OneDrive) -->
+  <!-- ENGINEERS' CHAT -->
+  <div class="section no-print" id="chatSection">
+    <div class="section-head"><div class="section-tag"></div><h2>Engineers' Chat</h2></div>
+    <div class="section-body">
+      <button class="btn-ghost" id="btnChatToggle" type="button" style="width:100%;">💬 Open Engineers' Chat</button>
+      <div id="chatBody" style="display:none; margin-top:12px;">
+        <div id="chatWho" style="margin-bottom:10px;">
+          <p class="note-inline" style="margin:0;">Chatting as <b id="chatWhoName"></b> <a href="#" id="chatWhoChange">change</a></p>
+          <div id="chatWhoPick" style="display:none;">
+            <p class="note-inline" style="margin:0 0 6px; font-weight:600;" id="chatWhoAsk">Who's using this device?</p>
+            <div id="chatWhoBtns" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+          </div>
+        </div>
+        <p class="note-inline" id="chatMsg" style="margin-top:0;"></p>
+        <div id="chatListView">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <button class="btn-ghost" id="btnChatNew" type="button">✏️ New topic</button>
+            <button class="btn-ghost" id="btnChatRefresh" type="button">🔄 Refresh</button>
+          </div>
+          <div id="chatNewForm" style="display:none; margin-bottom:12px;">
+            <div class="field full"><label for="chatNewTitle">What's the problem / question?</label><input type="text" id="chatNewTitle" maxlength="120" placeholder="e.g. Hoist won't lower after limit trip"></div>
+            <div class="field full"><label for="chatNewTag">Crane / customer / site (optional)</label><input type="text" id="chatNewTag" maxlength="80"></div>
+            <div class="field full"><label for="chatNewBody">Details</label><textarea id="chatNewBody" placeholder="What did you find? What have you tried?"></textarea></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+              <button class="btn-ghost" id="btnChatNewPhoto" type="button">📷 Add photo</button>
+              <span class="note-inline" id="chatNewPhotoName" style="margin:0;"></span>
+              <button class="btn-ghost" id="btnChatPost" type="button">Post to team</button>
+              <button class="btn-ghost" id="btnChatNewCancel" type="button">Cancel</button>
+            </div>
+          </div>
+          <div id="chatList"></div>
+        </div>
+        <div id="chatThreadView" style="display:none;">
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <button class="btn-ghost" id="btnChatBack" type="button">← All topics</button>
+            <button class="btn-ghost" id="btnChatSolved" type="button">✔ Mark solved</button>
+            <button class="btn-ghost" id="btnChatDelete" type="button" style="display:none;">🗑 Delete topic</button>
+          </div>
+          <h3 id="chatThreadTitle" style="margin:10px 0 0; font-size:16px;"></h3>
+          <p class="note-inline" id="chatThreadTag" style="margin-top:2px;"></p>
+          <div class="chat-msgs" id="chatMsgs"></div>
+          <div class="chat-compose">
+            <textarea id="chatReply" placeholder="Write a reply…"></textarea>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;">
+              <button class="btn-ghost" id="btnChatPhoto" type="button">📷 Photo</button>
+              <span class="note-inline" id="chatPhotoName" style="margin:0;"></span>
+              <button class="btn-ghost" id="btnChatSend" type="button">Send</button>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="chatFile" accept="image/*" style="display:none;">
+      </div>
+    </div>
+  </div>
+
+  <!-- TEAM SYNC (Supabase) -->
   <div class="section no-print">
-    <div class="section-head"><div class="section-tag"></div><h2>Team Sync — OneDrive</h2></div>
+    <div class="section-head"><div class="section-tag"></div><h2>Team Sync — Cloud</h2></div>
     <div class="section-body">
       <p class="note-inline" id="syncStatusText" style="margin-top:0;">Checking sync status…</p>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn-ghost" id="btnMsSignIn" type="button" style="display:none;">🔑 Sign in with Microsoft</button>
-        <button class="btn-ghost" id="btnSyncNow" type="button" style="display:none;">🔄 Sync now</button>
-        <button class="btn-ghost" id="btnMsSignOut" type="button" style="display:none;">Sign out</button>
+      <div id="sbLoginForm" style="display:none;">
+        <div class="field full"><label for="sbEmail">Email</label><input type="email" id="sbEmail" autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off"></div>
+        <div class="field full" style="margin-top:8px;"><label for="sbPassword">Password</label><input type="password" id="sbPassword" autocomplete="current-password"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button class="btn-ghost" id="btnSbSignIn" type="button">🔑 Sign in</button>
+          <button class="btn-ghost" id="btnSbForgot" type="button">Forgot password?</button>
+        </div>
       </div>
-      <p class="note-inline" id="syncRedirectInfo" style="display:none;"></p>
-      <p class="note-inline" id="syncConfigHint" style="display:none;">OneDrive sync isn't set up yet — add your Client ID, Tenant ID and shared folder link in the MS_CONFIG block near the top of the file, then re-upload.</p>
+      <div id="sbSignedIn" style="display:none;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-ghost" id="btnSyncNow" type="button">🔄 Sync now</button>
+          <button class="btn-ghost" id="btnSbChangePw" type="button">Change password</button>
+          <button class="btn-ghost" id="btnMsSignOut" type="button">Sign out</button>
+        </div>
+        <p class="note-inline"><a href="#" id="btnSyncAll">Re-download everything from the cloud</a></p>
+      </div>
+      <div id="sbPwForm" style="display:none; margin-top:10px;">
+        <div class="field full"><label for="sbNewPw">New password (at least 8 characters)</label><input type="password" id="sbNewPw" autocomplete="new-password"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button class="btn-ghost" id="btnSbSavePw" type="button">Save new password</button>
+          <button class="btn-ghost" id="btnSbCancelPw" type="button">Cancel</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -392,7 +482,7 @@
         <div class="field"><label>Falls</label><input type="text" id="f_falls"></div>
         <div class="field"><label>Customer email</label><input type="email" id="f_email"></div>
         <div class="field"><label>Site / location</label><input type="text" id="f_site" placeholder="e.g. Unit 4, Chesterfield depot"></div>
-        <div class="field"><label>Customer portal PIN</label><input type="text" id="f_customerpin" inputmode="numeric" maxlength="6" placeholder="4\u20136 digits"></div>
+        <div class="field"><label>Customer portal PIN</label><input type="text" id="f_customerpin" inputmode="numeric" maxlength="6" placeholder="4\u20136 digits (6 is safest)"><span class="note-inline" style="margin-top:2px;">Customers see their reports at <b>wr42pw6p4n-debug.github.io/Report-sheet/portal.html</b> using the company name and this PIN. Tap Save as company after setting it.</span><button class="btn-ghost" id="btnCopyPortal" type="button" style="margin-top:6px;">📋 Copy portal login message</button></div>
         <div class="field"><label>Date</label><input type="date" id="f_date"></div>
         <div class="field"><label>Engineer</label><input type="text" id="f_engineer" placeholder="Your name"></div>
         <div class="field"><label>Next due date</label><input type="date" id="f_nextdue"></div>
@@ -545,7 +635,7 @@
 
       <details class="wk-more">
         <summary>Combine reports from other phones</summary>
-        <p class="note-inline">With OneDrive sync switched on (top of the page) reports arrive on their own. Otherwise, they're saved on the phone they were written on: on each engineer's phone, open this section, pick the week and tap Export, then send the file over. On this device, tap Add reports and choose the file(s) — the full reports are merged in (they'll show up in Saved Reports too, not just the list below), minus photos and signatures to keep the file small.</p>
+        <p class="note-inline">When you're signed in to Team Sync, reports arrive on their own. Otherwise, they're saved on the phone they were written on: on each engineer's phone, open this section, pick the week and tap Export, then send the file over. On this device, tap Add reports and choose the file(s) — the full reports are merged in (they'll show up in Saved Reports too, not just the list below), minus photos and signatures to keep the file small.</p>
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
           <button class="btn-ghost" id="wkExport" type="button">📤 Export this week's reports</button>
           <button class="btn-ghost" id="wkImportBtn" type="button">📥 Add reports…</button>
@@ -569,7 +659,7 @@
   <button class="action-btn outline" id="btnLoler" type="button" style="display:none; border-color:var(--serv); color:var(--serv);">📋 Download LOLER Report</button>
   <button class="action-btn yellow" id="btnEmail" type="button">✉️ Email customer</button>
   <button class="action-btn outline" id="btnCopyText" type="button">📋 Copy report text</button>
-  <button class="action-btn outline" id="btnOnedrive" type="button">☁️ Save to OneDrive</button>
+  <button class="action-btn outline" id="btnOnedrive" type="button">☁️ Save PDF to cloud</button>
 </div>
 <div class="status-msg no-print" id="statusMsg"></div>
 
@@ -577,17 +667,13 @@
 (function(){
 
 // ============================================================================
-// ONEDRIVE TEAM SYNC — fill these three in, then re-upload this file.
-//   clientId         Application (client) ID of the Microsoft Entra app registration
-//   tenantId         Directory (tenant) ID
-//   sharedFolderLink the "Copy link" share link of the OneDrive/SharePoint folder
-//                    every engineer should sync to (must allow people to edit)
-// These are not passwords — leaving them in the file is fine.
+// TEAM SYNC (Supabase). The project URL and the publishable key are safe to leave
+// in the file — they are not passwords. Data is protected by the logins and the
+// row-level security rules set up in Supabase, never by hiding this key.
 // ============================================================================
-const MS_CONFIG = {
-  clientId: '9c20c7b9-555d-4bd6-9a62-2a1dd5b4cb6d',
-  tenantId: 'c40d9f52-c5bb-40ac-974e-074bf6b712b5',
-  sharedFolderLink: ''
+const SB_CONFIG = {
+  url: 'https://eyerpokgadrgxticqzez.supabase.co',
+  key: 'sb_publishable_FsyUdlUOTgA51pkAy5pNiA_AsHqq6Ed'
 };
 
 // company logo (embedded so the report works fully offline)
@@ -705,7 +791,7 @@ let ITEM_IDS = [];
 let state = {
   customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
   date: new Date().toISOString().slice(0,10),
-  engineer:'', visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'',
+  engineer:'', visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'', cloudId:'',
   loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
   items:{} // id -> {status, note}
 };
@@ -850,14 +936,14 @@ function engineerInitials(name){
   if(!parts.length) return 'XX';
   return parts.slice(0,3).map(p=>p[0].toUpperCase()).join('');
 }
-function assignReportNo(){
-  if(state.reportNo) return state.reportNo;
-  const d = String(state.date || new Date().toISOString().slice(0,10));
-  const base = 'KE-' + d.replace(/-/g,'').slice(2,8) + '-' + engineerInitials(state.engineer);
+// shared running number (KE-0001, KE-0002 …) from the cloud when signed in and online;
+// otherwise the local KE-YYMMDD-INITIALS-NN format so work on site is never held up
+function localReportNo(target){
+  const d = String(target.date || new Date().toISOString().slice(0,10));
+  const base = 'KE-' + d.replace(/-/g,'').slice(2,8) + '-' + engineerInitials(target.engineer);
   const counters = storeGet('report_counters') || {};
   let n = (Number(counters[base])||0) + 1;
   try{
-    // also look at reports already on this device (including ones added from other phones)
     eqAllVisits().forEach(v=>{
       const no = String(v.r.reportNo||'');
       if(no.indexOf(base+'-') === 0){ const m = /-(\d+)$/.exec(no); if(m) n = Math.max(n, Number(m[1])+1); }
@@ -865,10 +951,24 @@ function assignReportNo(){
   }catch(e){}
   counters[base] = n;
   try{ storeSet('report_counters', counters); }catch(e){}
-  state.reportNo = base + '-' + String(n).padStart(2,'0');
-  const el = document.getElementById('f_reportNo'); if(el) el.value = state.reportNo;
-  return state.reportNo;
+  return base + '-' + String(n).padStart(2,'0');
 }
+let reportNoBusy = null;
+async function assignReportNo(){
+  if(state.reportNo) return state.reportNo;
+  if(reportNoBusy) return reportNoBusy;
+  const target = state;
+  reportNoBusy = (async()=>{
+    let no = null;
+    if(syncReady()) no = await sbReportNo();
+    if(!no) no = localReportNo(target);
+    if(!target.reportNo) target.reportNo = no;
+    if(target === state){ const el = document.getElementById('f_reportNo'); if(el) el.value = state.reportNo; }
+    return target.reportNo;
+  })().finally(()=>{ reportNoBusy = null; });
+  return reportNoBusy;
+}
+
 
 function setStatus(id, statusKey){
   const item = state.items[id];
@@ -1250,6 +1350,7 @@ document.getElementById('saveCompanyBtn').addEventListener('click', async ()=>{
   try{
     storeSet('companies', companies);
     companiesCache = await refreshCompanySelect();
+    try{ syncKick(); }catch(e){}
     const idx = companies.findIndex(c => c.customer === newCo.customer);
     if(idx > -1) companySelect.value = idx;
     setStatusMsg(existingIndex > -1 ? 'Saved company details updated.' : 'Company saved to your list.', 'ok');
@@ -1363,7 +1464,7 @@ let notifOpen = null, notifLimit = 25, notifFilter = '', notifData = {due:[], re
 // Repairs done = work carried out recorded in the last 30 days.
 // completions are stored separately from the reports (the original report is never altered):
 // key = report (number or id) + item, value = {date, note}
-function compKeyFor(v, it){ return (v.r.reportNo || v.id) + '|' + slug(it.group||'') + '__' + slug(it.label||''); }
+function compKeyFor(v, it){ return (v.r.reportNo || v.r.cloudId || v.id) + '|' + slug(it.group||'') + '__' + slug(it.label||''); }
 function getCompletions(){ return storeGet('repair_completions') || {}; }
 function collectRepairs(){
   const comps = getCompletions();
@@ -1463,6 +1564,7 @@ function buildRepairRow(x, isDone){
         }catch(e){ setStatusMsg('Could not save: '+e.message, 'err'); return; }
         setStatusMsg('Marked completed on '+formatDateUK(today)+'.', 'ok');
         renderDueDates();
+        try{ syncKick(); }catch(e){}
         try{ renderEqResults(); }catch(e){}
       });
       rowB.appendChild(ok); rowB.appendChild(no);
@@ -1482,6 +1584,7 @@ function buildRepairRow(x, isDone){
       try{ const comps = getCompletions(); delete comps[compKeyFor(x.v, it)]; storeSet('repair_completions', comps); }catch(e){ setStatusMsg('Could not save: '+e.message, 'err'); return; }
       setStatusMsg('Repair reopened.', 'ok');
       renderDueDates();
+      try{ syncKick(); }catch(e){}
       try{ renderEqResults(); }catch(e){}
     });
     btns.appendChild(re);
@@ -1680,6 +1783,7 @@ historySelect.addEventListener('change', async ()=>{
   try{
     const loaded = storeGet('report_'+historySelect.value);
     if(!loaded) return;
+    if(String(historySelect.value).indexOf('imp_') === 0) loaded.cloudId = ''; // a copy of someone else's report saves as its own record
     applyState(loaded);
     setStatusMsg('Report loaded.', 'ok');
   }catch(e){ setStatusMsg('Could not load report: '+e.message, 'err'); }
@@ -1690,6 +1794,7 @@ function applyState(loaded){
   if(state.reportNo === undefined) state.reportNo = '';
   if(state.nextdue === undefined) state.nextdue = '';
   if(state.site === undefined) state.site = '';
+  if(state.cloudId === undefined) state.cloudId = '';
   if(!state.loler) state.loler = {location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'};
   if(!state.loler.equipmentType) state.loler.equipmentType = 'CRANE';
   Object.entries(fieldMap).forEach(([elId,key])=> document.getElementById(elId).value = state[key]||'');
@@ -1738,7 +1843,8 @@ function setStatusMsg(msg, type, ms){
 // ---------- save report ----------
 async function saveReport(){
   if(!state.customer){ setStatusMsg('Add a customer name before saving.', 'err'); return false; }
-  assignReportNo();
+  await assignReportNo();
+  if(!state.cloudId) state.cloudId = newCloudId();
   const reportId = Date.now().toString();
   try{
     storeSet('report_'+reportId, state);
@@ -1769,7 +1875,7 @@ function freshState(keepEngineer){
     customer:'', manufacturer:'', idno:'', number:'', wll:'', falls:'', email:'', customerpin:'',
     date: new Date().toISOString().slice(0,10),
     engineer: keepEngineer ? state.engineer : '',
-    visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'',
+    visitType:'Service', notes:'', reportNo:'', nextdue:'', site:'', cloudId:'',
     loler:{location:'', makeserial:'', swl:'', description:'', prevexam:'', nextexam:'', ourref:'', extraA:'', extraB:'', extraC:'', signname:'', signature:null, equipmentType:'CRANE'},
     items
   };
@@ -2137,7 +2243,7 @@ document.getElementById('btnPrint').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnPrint');
   btn.disabled = true; btn.textContent = 'Preparing…';
   try{
-    assignReportNo();
+    await assignReportNo();
     const doc = state.visitType === 'LOLER' ? await buildLolerPdfBlob() : await buildPdfBlob();
     const blobUrl = doc.output('bloburl');
     const w = window.open(blobUrl, '_blank');
@@ -2390,7 +2496,7 @@ document.getElementById('btnPdf').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnPdf');
   btn.disabled = true; btn.textContent = 'Building PDF…';
   try{
-    assignReportNo();
+    await assignReportNo();
     const pdf = await buildPdfBlob();
     pdf.save(reportFilename());
     setStatusMsg('PDF downloaded.', 'ok');
@@ -2598,7 +2704,7 @@ document.getElementById('btnLoler').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnLoler');
   btn.disabled = true; btn.textContent = 'Building LOLER report…';
   try{
-    assignReportNo();
+    await assignReportNo();
     const pdf = await buildLolerPdfBlob();
     pdf.save(lolerFilename());
     setStatusMsg(state.loler.signature ? 'LOLER report downloaded.' : 'LOLER report downloaded — note it has no signature yet, sign in the box above before sending it out.', 'ok');
@@ -2623,6 +2729,19 @@ function findingsSummaryText(){
 // pre-filled. mailto: links silently fail once they get too long, so this
 // keeps the body short and points to the attached PDF for full detail;
 // use "Copy report text" below for the full version if you need it.
+const PORTAL_URL = 'https://wr42pw6p4n-debug.github.io/Report-sheet/portal.html';
+function portalLink(){ return PORTAL_URL + (state.customer ? '?c=' + encodeURIComponent(state.customer.trim()) : ''); }
+// lines added to customer emails/messages when this customer has a portal PIN
+function portalLines(){
+  if(!state.customer || !String(state.customerpin||'').trim()) return [];
+  return [
+    `View all your Key Engineering reports online, any time:`,
+    portalLink(),
+    `Company name: ${state.customer.trim()}`,
+    `PIN: ${String(state.customerpin).trim()}`,
+    ``
+  ];
+}
 function reportPlainText(full){
   const findingsText = full ? findingsSummaryText()
     : (()=>{
@@ -2644,6 +2763,7 @@ function reportPlainText(full){
     `General notes:`,
     full ? (state.notes || '(none)') : (state.notes ? state.notes.slice(0,200)+(state.notes.length>200?'…':'') : '(none)'),
     ``,
+    ...portalLines(),
     `(Full details are in the attached PDF — download it with the Download PDF button and attach it before sending.)`
   ].join('\n');
 }
@@ -2651,7 +2771,7 @@ function reportPlainText(full){
 document.getElementById('btnEmail').addEventListener('click', async ()=>{
   if(!state.email){ setStatusMsg('Add a customer email address first.', 'err'); return; }
   const btn = document.getElementById('btnEmail');
-  assignReportNo();
+  await assignReportNo();
   const subject = `Crane Service Report – ${state.customer} – ${state.date}${state.reportNo ? ' – '+state.reportNo : ''}`;
 
   // Try to actually attach the PDF via the device's native share sheet — this is
@@ -2679,7 +2799,7 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
       let body = reportPlainText(false);
       let mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       if(mailto.length > 1700){
-        body = `Crane Service Report for ${state.customer||'—'} — ${state.date}.\nEngineer: ${state.engineer||'n/a'}.\nSee attached PDF for full findings and notes.`;
+        body = `Crane Service Report for ${state.customer||'—'} — ${state.date}.\nEngineer: ${state.engineer||'n/a'}.\nSee attached PDF for full findings and notes.` + (portalLines().length ? '\n\n' + portalLines().join('\n') : '');
         mailto = `mailto:${encodeURIComponent(state.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       }
       window.location.href = mailto;
@@ -2688,6 +2808,14 @@ document.getElementById('btnEmail').addEventListener('click', async ()=>{
   }finally{
     btn.disabled = false; btn.textContent = '✉️ Email customer';
   }
+});
+
+document.getElementById('btnCopyPortal').addEventListener('click', async ()=>{
+  const lines = portalLines();
+  if(!lines.length){ setStatusMsg('Enter the customer name and a portal PIN first.', 'err'); return; }
+  const text = `Hi,\n\n` + lines.join('\n') + `\nKey Engineering (Chesterfield) Ltd`;
+  try{ await navigator.clipboard.writeText(text); setStatusMsg('Portal login message copied \u2014 paste it into a text, WhatsApp or email.', 'ok'); }
+  catch(e){ setStatusMsg('Could not copy automatically ('+e.message+').', 'err'); }
 });
 
 document.getElementById('btnCopyText').addEventListener('click', async ()=>{
@@ -2701,30 +2829,30 @@ document.getElementById('btnCopyText').addEventListener('click', async ()=>{
 });
 
 
-// ---------- Save to OneDrive ----------
-// A downloaded HTML file can't silently log into your OneDrive and upload a
-// file — that needs a real sign-in step. On mobile there's no drag-and-drop,
-// so the real flow is: download the PDF to your phone, then upload it from
-// inside the OneDrive app itself.
+// ---------- Save PDF to the team cloud ----------
+// Files the PDF under  Customer ▸ Service / Inspection / LOLER  in the shared cloud storage.
+// Signed out (or no signal) it simply downloads the PDF to this device instead.
 document.getElementById('btnOnedrive').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnOnedrive');
   btn.disabled = true; btn.textContent = 'Preparing…';
   try{
-    assignReportNo();
-    const pdf = await buildPdfBlob();
+    await assignReportNo();
+    const isL = state.visitType === 'LOLER';
+    const pdf = isL ? await buildLolerPdfBlob() : await buildPdfBlob();
+    const fname = isL ? lolerFilename() : reportFilename();
     let uploaded = false;
     if(syncReady()){
-      try{ await syncUploadPdf(pdf, reportFilename()); uploaded = true; setStatusMsg('PDF uploaded to the shared OneDrive folder.', 'ok'); }
-      catch(e){ setStatusMsg('Could not reach OneDrive ('+e.message+') — the PDF is being saved to your phone instead.', 'err'); }
+      try{ const path = await syncUploadPdf(pdf, fname, state); uploaded = true; setStatusMsg('PDF filed in the team cloud: '+decodeURIComponent(path.split('/').slice(0,2).join(' ▸ '))+'.', 'ok', 10000); }
+      catch(e){ setStatusMsg('Could not reach the cloud ('+e.message+') — the PDF is being saved to this device instead.', 'err'); }
     }
     if(!uploaded){
-    pdf.save(reportFilename());
-    setStatusMsg('PDF saved to your phone\u2019s Downloads/Files app. Open the OneDrive app → tap + → Upload → pick "'+reportFilename()+'" from Downloads.', 'ok');
+      pdf.save(fname);
+      setStatusMsg(syncReady() ? 'PDF saved to this device\u2019s Downloads.' : 'PDF saved to this device\u2019s Downloads. Sign in under Team Sync to file PDFs in the shared cloud automatically.', 'ok');
     }
   }catch(e){
     setStatusMsg('Could not prepare the PDF: '+e.message, 'err');
   }finally{
-    btn.disabled = false; btn.textContent = '☁️ Save to OneDrive';
+    btn.disabled = false; btn.textContent = '☁️ Save PDF to cloud';
   }
 });
 
@@ -3064,7 +3192,7 @@ function wkSanitize(j){
     if(!r || !wkParse(r.date)) return;
     const loler = r.loler || {};
     incoming.push({
-      id: wkClean(r.id,20) || String(Date.now()),
+      id: wkClean(r.id,40) || String(Date.now()),
       reportNo: wkClean(r.reportNo,40), site: wkClean(r.site,120),
       nextdue: wkParse(r.nextdue) ? String(r.nextdue).slice(0,10) : '',
       customer: wkClean(r.customer,120), email: wkClean(r.email,120), idno: wkClean(r.idno,60),
@@ -3218,270 +3346,708 @@ document.getElementById('wkClearImported').addEventListener('click', ()=>{
 wkRender();
 wkImportInfo();
 
-// ---------- OneDrive team sync ----------
-// Every saved report is copied (as a small photo-free file) into "Sync data" inside the shared
-// OneDrive folder, and Sync pulls everyone else's files into the Weekly Repairs List.
-// Nothing here ever redirects to Microsoft on its own — that would wipe a half-finished report —
-// so if sign-in has expired, uploads queue up until you tap "Sign in with Microsoft".
-const SYNC_SCOPES = ['User.Read','Files.ReadWrite.All'];
-const SYNC_DATA_DIR = 'Sync data';
-const SYNC_PDF_DIR = 'Report PDFs';
-const SYNC_WINDOW_DAYS = 60;
-let msalApp = null, syncBusy = false;
+// ---------- Team sync (Supabase) ----------
+// Sign in once; after that every saved report, customer and completed repair is shared with the
+// whole team automatically, and PDFs are filed under Customer ▸ Service/Inspection/LOLER.
+// Everything still works with no signal or while signed out — changes queue up and go when
+// you are back online. Nothing here ever redirects away from a half-finished report.
+const SB = {url: SB_CONFIG.url.replace(/\/+$/,''), key: SB_CONFIG.key};
+let syncBusy = false, syncAgain = false, lastSyncAt = 0;
 
-function syncConfigured(){
-  return !!(MS_CONFIG.clientId.trim() && MS_CONFIG.tenantId.trim() && MS_CONFIG.sharedFolderLink.trim());
-}
-function syncRedirectUri(){ return window.location.origin + window.location.pathname; }
-function syncAccount(){ return msalApp && msalApp.getAllAccounts()[0]; }
-function syncReady(){ return !!(syncConfigured() && msalApp && syncAccount()); }
+function sbEl(id){ return document.getElementById(id); }
 function syncMap(key){ const v = storeGet(key); return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}; }
+function stableStr(o){ return JSON.stringify(o, Object.keys(o||{}).sort()); }
+function newCloudId(){
+  try{ if(window.crypto && crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2,10);
+}
 function syncStatus(text, kind){
-  const el = document.getElementById('syncStatusText');
+  const el = sbEl('syncStatusText');
   el.textContent = text;
   el.style.color = kind === 'err' ? 'var(--urgent)' : kind === 'ok' ? 'var(--serv)' : '';
   el.style.fontWeight = kind ? '600' : '';
 }
-function syncDeviceId(){
-  let d = storeGet('sync_device');
-  if(!d){ d = Math.random().toString(36).slice(2,10); try{ storeSet('sync_device', d); }catch(e){} }
-  return d;
+
+// ---- session ----
+function sbSession(){ const s = storeGet('sb_session'); return (s && s.access_token) ? s : null; }
+function sbSetSession(j){
+  if(!j){ storeDelete('sb_session'); storeDelete('sb_profile'); return; }
+  const old = sbSession() || {};
+  const u = j.user || {};
+  try{
+    storeSet('sb_session', {
+      access_token: j.access_token, refresh_token: j.refresh_token || old.refresh_token || '',
+      expires_at: j.expires_at || (Math.floor(Date.now()/1000) + (Number(j.expires_in) || 3600)),
+      email: u.email || old.email || '', uid: u.id || old.uid || ''
+    });
+  }catch(e){}
 }
-function syncHash(str){ let h = 5381; for(let i=0;i<str.length;i++) h = ((h<<5)+h+str.charCodeAt(i))|0; return (h>>>0).toString(36); }
-// same visit -> same file name, so re-saving a report replaces its file instead of piling up copies
-function syncFileName(x){
-  const cust = String(x.r.customer||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,30) || 'customer';
-  return `${wkReportDate(x)}_${cust}_${x.r.visitType||'Service'}_${syncHash(wkKey(x))}.json`;
+function syncReady(){ return !!sbSession(); }
+async function sbToken(){
+  const s = sbSession();
+  if(!s) throw new Error('Not signed in.');
+  if(s.expires_at - 60 > Date.now()/1000) return s.access_token;
+  let res;
+  res = await fetch(SB.url + '/auth/v1/token?grant_type=refresh_token', {method:'POST',
+    headers:{apikey:SB.key, 'Content-Type':'application/json'}, body:JSON.stringify({refresh_token:s.refresh_token})});
+  if(!res.ok){
+    if(res.status >= 400 && res.status < 500){ sbSetSession(null); syncRefreshUi(); }
+    throw new Error('Your sign-in has expired — please sign in again.');
+  }
+  const j = await res.json();
+  sbSetSession(j);
+  return j.access_token;
+}
+async function sbFetch(path, opts){
+  const tok = await sbToken();
+  opts = opts || {};
+  const headers = Object.assign({apikey:SB.key, Authorization:'Bearer '+tok}, opts.headers || {});
+  return fetch(SB.url + path, Object.assign({}, opts, {headers}));
+}
+async function sbFail(res, doing){
+  let m = '';
+  try{ const j = await res.json(); m = j.message || j.msg || j.error_description || j.error || ''; }catch(e){}
+  let why = `${doing} failed (${res.status})`;
+  if(res.status === 401) why = 'The cloud rejected the sign-in — sign out and back in';
+  else if(res.status === 403 || /row-level security/i.test(m)) why = "You don't have permission to do that";
+  else if(res.status === 404 || /schema cache|does not exist/i.test(m)) return new Error("The cloud database isn't set up yet — the setup SQL still needs running in Supabase");
+  return new Error(why + (m ? ' — ' + m : ''));
+}
+async function sbReportNo(){
+  const ctrl = new AbortController(); const t = setTimeout(()=> ctrl.abort(), 6000);
+  try{
+    const res = await sbFetch('/rest/v1/rpc/next_report_no', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}', signal:ctrl.signal});
+    if(!res.ok) return null;
+    const j = await res.json();
+    return (typeof j === 'string' && j) ? j : null;
+  }catch(e){ return null; }
+  finally{ clearTimeout(t); }
+}
+
+// ---- reports: push ----
+function sbRow(x){
+  const r = x.r;
+  return {id:r.cloudId, report_no:r.reportNo||null, customer:r.customer||null, crane_no:r.number||null, id_no:r.idno||null,
+    visit_type:r.visitType||'Service', report_date:wkReportDate(x)||null, engineer:r.engineer||null,
+    next_due:dueIsoFor(r)||null, site:r.site||null, data:wkExportReport({id:r.cloudId, r})};
 }
 function syncEnqueue(x){
-  if(!wkParse(x.r.date) && !Number(x.id)) return;
-  const name = syncFileName(x);
+  if(!x || !x.r || !x.r.cloudId) return;
   const pending = syncMap('sync_pending');
-  pending[name] = JSON.stringify({app:'crane-report', kind:'weekly-repairs', version:1, exportedAt:new Date().toISOString(),
-    weekStart: wkWeekStart(wkReportDate(x)), device: syncDeviceId(), reports:[wkExportReport(x)]});
-  storeSet('sync_pending', pending);
+  pending[x.r.cloudId] = sbRow(x);
+  try{ storeSet('sync_pending', pending); }catch(e){}
 }
 function syncPendingCount(){ return Object.keys(syncMap('sync_pending')).length; }
-
-async function syncToken(){
-  const acct = syncAccount();
-  if(!acct) throw new Error('Not signed in — tap "Sign in with Microsoft".');
-  try{
-    const r = await msalApp.acquireTokenSilent({scopes:SYNC_SCOPES, account:acct});
-    return r.accessToken;
-  }catch(e){
-    throw new Error('Your Microsoft sign-in has expired — tap "Sign in with Microsoft" again.');
-  }
-}
-async function syncGraph(path, opts){
-  const token = await syncToken();
-  const url = path.startsWith('http') ? path : 'https://graph.microsoft.com/v1.0' + path;
-  opts = opts || {};
-  return fetch(url, Object.assign({}, opts, {headers:Object.assign({Authorization:'Bearer '+token}, opts.headers || {})}));
-}
-async function syncFail(res, doing){
-  let detail = '';
-  try{ const j = await res.json(); detail = (j.error && j.error.message) || ''; }catch(e){}
-  let why = `${doing} failed (${res.status})`;
-  if(res.status === 401) why = 'Microsoft rejected the sign-in — sign out and back in';
-  else if(res.status === 403) why = "You don't have permission for that folder — check the shared link allows editing and an admin has approved the app's OneDrive permission";
-  else if(res.status === 404) why = "Couldn't find the shared folder — check the link in MS_CONFIG";
-  return new Error(why + (detail && res.status !== 404 ? ' — ' + detail : ''));
-}
-
-async function syncResolveFolder(){
-  const link = MS_CONFIG.sharedFolderLink.trim();
-  const cached = storeGet('sync_folder');
-  if(cached && cached.link === link && cached.driveId && cached.itemId) return cached;
-  const enc = 'u!' + btoa(unescape(encodeURIComponent(link))).replace(/=+$/,'').replace(/\//g,'_').replace(/\+/g,'-');
-  const res = await syncGraph('/shares/' + enc + '/driveItem?$select=id,name,parentReference,folder',
-    {headers:{Prefer:'redeemSharingLinkIfNecessary'}});
-  if(!res.ok) throw await syncFail(res, 'Opening the shared folder');
-  const j = await res.json();
-  if(!j.folder) throw new Error('That link points to a file, not a folder.');
-  const driveId = j.parentReference && j.parentReference.driveId;
-  if(!driveId) throw new Error("Couldn't work out which drive that folder lives in.");
-  const f = {link, driveId, itemId:j.id};
-  try{ storeSet('sync_folder', f); }catch(e){}
-  return f;
-}
-
-async function syncPut(folder, dir, name, body, type){
-  const path = `/drives/${folder.driveId}/items/${folder.itemId}:/${encodeURIComponent(dir)}/${encodeURIComponent(name)}:/content?@microsoft.graph.conflictBehavior=replace`;
-  const res = await syncGraph(path, {method:'PUT', headers:{'Content-Type':type}, body});
-  if(!res.ok) throw await syncFail(res, 'Upload');
-}
-async function syncUploadPdf(pdf, filename){
-  const folder = await syncResolveFolder();
-  await syncPut(folder, SYNC_PDF_DIR, filename, pdf.output('blob'), 'application/pdf');
-}
-
-// queue every recent report of ours that hasn't gone up yet (first sync, or reports saved while signed out)
+// reports saved on this device before sync existed (or while signed out) get an id and join the queue
 function syncBackfill(){
-  const cutoff = wkIso(new Date(Date.now() - SYNC_WINDOW_DAYS*86400000));
   const uploaded = syncMap('sync_uploaded'), pending = syncMap('sync_pending');
-  wkDedupe(wkAllReports().filter(x=> x.src === 'local' && wkReportDate(x) >= cutoff)).forEach(x=>{
-    const name = syncFileName(x);
-    if(uploaded[name] !== x.id && !pending[name]) syncEnqueue(x);
+  wkDedupe(wkAllReports().filter(x=> x.src === 'local' && String(x.id).indexOf('imp_') !== 0)).forEach(x=>{
+    if(!x.r.cloudId){ x.r.cloudId = newCloudId(); try{ storeSet('report_'+x.id, x.r); }catch(e){ return; } }
+    if(!uploaded[x.r.cloudId] && !pending[x.r.cloudId]) syncEnqueue(x);
   });
 }
-async function syncUpload(folder){
+async function syncUp(){
   const uploaded = syncMap('sync_uploaded'), pending = syncMap('sync_pending');
+  const ids = Object.keys(pending).filter(id=> pending[id] && typeof pending[id] === 'object');
   let n = 0;
-  for(const [name, body] of Object.entries(pending)){
-    await syncPut(folder, SYNC_DATA_DIR, name, body, 'application/json');
-    let id = '';
-    try{ id = String(JSON.parse(body).reports[0].id); }catch(e){}
-    uploaded[name] = id; delete pending[name]; n++;
+  for(let i = 0; i < ids.length; i += 20){
+    const chunk = ids.slice(i, i+20);
+    const res = await sbFetch('/rest/v1/reports?on_conflict=id', {method:'POST',
+      headers:{'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(chunk.map(id=> pending[id]))});
+    if(!res.ok) throw await sbFail(res, 'Upload');
+    chunk.forEach(id=>{ uploaded[id] = 1; delete pending[id]; });
+    n += chunk.length;
     storeSet('sync_uploaded', uploaded); storeSet('sync_pending', pending);
   }
   return n;
 }
 
-async function syncList(folder){
-  let url = `/drives/${folder.driveId}/items/${folder.itemId}:/${encodeURIComponent(SYNC_DATA_DIR)}:/children?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl&$top=200`;
-  const out = [];
-  while(url){
-    const res = await syncGraph(url);
-    if(res.status === 404) return out; // nobody has uploaded anything yet
-    if(!res.ok) throw await syncFail(res, 'Listing the shared folder');
-    const j = await res.json();
-    out.push(...wkArr(j.value));
-    url = j['@odata.nextLink'] || null;
+// ---- reports: pull ----
+async function syncPullReports(){
+  const last = storeGet('sb_last_pull') || '1970-01-01T00:00:00+00:00';
+  const known = new Set(Object.keys(syncMap('sync_uploaded')));
+  wkAllReports().forEach(x=>{ if(x.r && x.r.cloudId) known.add(String(x.r.cloudId)); });
+  wkArr(storeGet('imported_reports')).forEach(r=> known.add(String(r.id||'')));
+  const incoming = []; let maxTs = last, offset = 0;
+  for(;;){
+    const res = await sbFetch(`/rest/v1/reports?select=id,data,updated_at&updated_at=gt.${encodeURIComponent(last)}&order=updated_at.asc,id.asc&limit=500&offset=${offset}`);
+    if(!res.ok) throw await sbFail(res, 'Download');
+    const rows = wkArr(await res.json());
+    rows.forEach(row=>{
+      if(row.updated_at > maxTs) maxTs = row.updated_at;
+      if(known.has(String(row.id)) || !row.data) return;
+      row.data.id = row.id;
+      incoming.push(row.data);
+    });
+    if(rows.length < 500) break;
+    offset += 500;
   }
-  return out;
-}
-async function syncDownload(folder, f){
-  const dl = f['@microsoft.graph.downloadUrl'];
-  if(dl){ try{ const r = await fetch(dl); if(r.ok) return await r.text(); }catch(e){} }
-  const res = await syncGraph(`/drives/${folder.driveId}/items/${f.id}/content`);
-  if(!res.ok) throw await syncFail(res, 'Download');
-  return await res.text();
-}
-async function syncPull(folder){
-  const cutoff = wkIso(new Date(Date.now() - 90*86400000));
-  const uploaded = syncMap('sync_uploaded'), seen = syncMap('sync_seen');
-  const files = (await syncList(folder)).filter(f=>
-    /^\d{4}-\d{2}-\d{2}_.+\.json$/.test(f.name || '') && f.name.slice(0,10) >= cutoff &&
-    !uploaded[f.name] && seen[f.name] !== f.lastModifiedDateTime);
-  const incoming = []; let bad = 0;
-  for(const f of files){
-    try{
-      incoming.push(...wkSanitize(JSON.parse(await syncDownload(folder, f))).incoming);
-      seen[f.name] = f.lastModifiedDateTime;
-    }catch(e){ bad++; }
-  }
-  storeSet('sync_seen', seen);
-  const added = incoming.length ? wkMergeImported(incoming) : 0;
-  return {added, files:files.length, bad};
+  const added = incoming.length ? wkMergeImported(wkSanitize({kind:'weekly-repairs', reports:incoming}).incoming) : 0;
+  storeSet('sb_last_pull', maxTs);
+  return {added};
 }
 
-function syncRefreshUi(){
-  const signIn = document.getElementById('btnMsSignIn'), signOut = document.getElementById('btnMsSignOut');
-  const now = document.getElementById('btnSyncNow'), hint = document.getElementById('syncConfigHint');
-  const info = document.getElementById('syncRedirectInfo');
-  [signIn, signOut, now, info].forEach(el=> el.style.display = 'none');
-  hint.style.display = 'none';
-  if(!syncConfigured()){
-    const missing = [['clientId','Client ID'],['tenantId','Tenant ID'],['sharedFolderLink','shared folder link']]
-      .filter(([k])=> !String(MS_CONFIG[k]||'').trim()).map(x=>x[1]);
-    syncStatus('OneDrive sync is switched off — still missing: ' + missing.join(', ') + '.');
-    hint.style.display = 'block';
-    return;
+// ---- customers (shared list) ----
+async function syncCustomers(){
+  const res = await sbFetch('/rest/v1/customers?select=name_key,data');
+  if(!res.ok) throw await sbFail(res, 'Customer list');
+  const remote = {};
+  wkArr(await res.json()).forEach(r=>{ if(r && r.name_key && r.data) remote[r.name_key] = r.data; });
+  const sent = syncMap('sync_cust_sent');
+  const companies = wkArr(storeGet('companies'));
+  const keyOf = c=> String((c && c.customer) || '').trim().toLowerCase();
+  const up = []; let changed = false;
+  companies.forEach((c, i)=>{
+    const k = keyOf(c); if(!k) return;
+    const js = stableStr(c);
+    if(!remote[k]) up.push({name_key:k, data:c});
+    else if(stableStr(remote[k]) !== js){
+      if(sent[k] === js){ companies[i] = remote[k]; sent[k] = stableStr(remote[k]); changed = true; }  // changed by someone else
+      else up.push({name_key:k, data:c});                                                              // changed here
+    } else sent[k] = js;
+  });
+  Object.keys(remote).forEach(k=>{
+    if(!companies.some(c=> keyOf(c) === k)){ companies.push(remote[k]); sent[k] = stableStr(remote[k]); changed = true; }
+  });
+  if(up.length){
+    const r2 = await sbFetch('/rest/v1/customers?on_conflict=name_key', {method:'POST',
+      headers:{'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal'}, body:JSON.stringify(up)});
+    if(!r2.ok) throw await sbFail(r2, 'Customer upload');
+    up.forEach(u=> sent[u.name_key] = stableStr(u.data));
   }
-  if(!msalApp){ return; } // syncInit is still starting up, or reported why it can't
+  if(changed){ storeSet('companies', companies); companiesCache = await refreshCompanySelect(); }
+  storeSet('sync_cust_sent', sent);
+}
+
+// ---- completed repairs ----
+async function syncCompletions(){
+  const res = await sbFetch('/rest/v1/completions?select=key,done_date,note');
+  if(!res.ok) throw await sbFail(res, 'Completed repairs');
+  const remote = {};
+  wkArr(await res.json()).forEach(r=>{ if(r && r.key) remote[r.key] = {date:r.done_date, note:r.note || ''}; });
+  const local = getCompletions(), sent = syncMap('sync_comp_sent');
+  const S = o=> JSON.stringify({date:o.date, note:o.note || ''});
+  const up = [], del = []; let changed = false;
+  Object.keys(local).forEach(k=>{
+    const l = local[k];
+    if(!remote[k]){
+      if(sent[k]){ delete local[k]; delete sent[k]; changed = true; }   // someone reopened it
+      else up.push(k);
+    } else if(S(remote[k]) !== S(l)){
+      if(sent[k] === S(l)){ local[k] = {date:remote[k].date, note:remote[k].note}; sent[k] = S(remote[k]); changed = true; }
+      else up.push(k);
+    } else sent[k] = S(l);
+  });
+  Object.keys(remote).forEach(k=>{
+    if(!local[k]){
+      if(sent[k]) del.push(k);                                           // reopened here
+      else { local[k] = remote[k]; sent[k] = S(remote[k]); changed = true; }
+    }
+  });
+  if(up.length){
+    const r2 = await sbFetch('/rest/v1/completions?on_conflict=key', {method:'POST',
+      headers:{'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify(up.map(k=>({key:k, done_date:local[k].date, note:local[k].note || ''})))});
+    if(!r2.ok) throw await sbFail(r2, 'Completed repairs upload');
+    up.forEach(k=> sent[k] = S(local[k]));
+  }
+  if(del.length){
+    const r3 = await sbFetch('/rest/v1/completions?key=in.(' + encodeURIComponent(del.map(k=> '"'+k+'"').join(',')) + ')', {method:'DELETE', headers:{Prefer:'return=minimal'}});
+    if(!r3.ok) throw await sbFail(r3, 'Reopening repairs');
+    del.forEach(k=> delete sent[k]);
+  }
+  if(changed) storeSet('repair_completions', local);
+  storeSet('sync_comp_sent', sent);
+}
+
+// ---- PDFs: Customer ▸ Service / Inspection / LOLER ----
+function sbFolderName(s){ return String(s||'').replace(/[^a-z0-9]+/gi,'_').replace(/^_+|_+$/g,'').slice(0,60) || 'Unnamed_customer'; }
+async function syncUploadPdf(pdf, filename, r){
+  r = r || state;
+  const path = [sbFolderName(r.customer), r.visitType || 'Service', filename].map(encodeURIComponent).join('/');
+  const res = await sbFetch('/storage/v1/object/report-pdfs/' + path, {method:'POST', headers:{'Content-Type':'application/pdf', 'x-upsert':'true'}, body:pdf.output('blob')});
+  if(!res.ok) throw await sbFail(res, 'PDF upload');
+  return path;
+}
+
+// ---- UI ----
+function syncRefreshUi(){
+  try{ chatRefreshUi(); }catch(e){}
+  const form = sbEl('sbLoginForm'), inn = sbEl('sbSignedIn');
+  const s = sbSession();
   const pend = syncPendingCount();
   const waiting = pend ? ` ${wkPlural(pend,'report')} waiting to upload.` : '';
-  const acct = syncAccount();
-  if(!acct){
-    signIn.style.display = '';
-    info.style.display = 'block';
-    info.textContent = 'Redirect address to register in the Microsoft app (Single-page application): ' + syncRedirectUri();
-    syncStatus('Not signed in.' + waiting);
+  if(!s){
+    form.style.display = ''; inn.style.display = 'none'; sbEl('sbPwForm').style.display = 'none';
+    if(!sbEl('sbEmail').value) sbEl('sbEmail').value = storeGet('sb_last_email') || '';
+    syncStatus('Not signed in — reports are saved on this device only. Sign in to share them with the team.' + waiting);
     return;
   }
-  now.style.display = ''; signOut.style.display = '';
+  form.style.display = 'none'; inn.style.display = '';
+  const prof = storeGet('sb_profile');
   const last = storeGet('sync_last');
-  syncStatus(`Signed in as ${acct.username || acct.name || 'Microsoft account'}.` +
+  syncStatus(`Signed in as ${s.email || 'your account'}${prof && prof.role === 'admin' ? ' (admin)' : ''}.` +
     (last ? ` Last synced ${new Date(last).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}.` : ' Not synced yet.') + waiting);
 }
-
 async function syncRun(){
-  if(syncBusy || !syncReady()) return;
+  if(!syncReady()) return;
+  if(syncBusy){ syncAgain = true; return; }
   syncBusy = true;
-  const now = document.getElementById('btnSyncNow');
+  const now = sbEl('btnSyncNow');
   now.disabled = true; now.textContent = 'Syncing…';
   try{
     syncStatus('Syncing…');
-    const folder = await syncResolveFolder();
+    try{
+      const pr = await sbFetch('/rest/v1/profiles?select=name,role&id=eq.' + encodeURIComponent(sbSession().uid || ''));
+      if(pr.ok){ const a = wkArr(await pr.json()); if(a[0]) storeSet('sb_profile', a[0]); }
+    }catch(e){}
     syncBackfill();
-    const up = await syncUpload(folder);
-    const down = await syncPull(folder);
-    storeSet('sync_last', new Date().toISOString());
+    const sent = await syncUp();
+    await syncCustomers();
+    const down = await syncPullReports();
+    await syncCompletions();
+    storeSet('sync_last', new Date().toISOString()); lastSyncAt = Date.now();
     wkRender(); wkImportInfo();
+    try{ renderDueDates(); }catch(e){}
+    try{ await refreshHistorySelect(); }catch(e){}
+    try{ renderEqResults(); }catch(e){}
     syncRefreshUi();
-    syncStatus(document.getElementById('syncStatusText').textContent +
-      ` Sent ${up}, received ${down.added} new.` + (down.bad ? ` ${down.bad} file(s) couldn't be read.` : ''), 'ok');
+    syncStatus(sbEl('syncStatusText').textContent + ` Sent ${sent}, received ${down.added} new.`, 'ok');
   }catch(e){
     syncRefreshUi();
-    syncStatus((document.getElementById('syncStatusText').textContent + ' ' + e.message).trim(), 'err');
+    const offline = (e && e.name === 'TypeError');
+    syncStatus((sbEl('syncStatusText').textContent + ' ' + (offline ? "No connection — it will sync when you're back online." : e.message)).trim(), 'err');
   }finally{
     syncBusy = false;
     now.disabled = false; now.textContent = '🔄 Sync now';
+    if(syncAgain){ syncAgain = false; setTimeout(syncRun, 500); }
   }
 }
+function syncKick(){ if(syncReady()) syncRun(); else syncRefreshUi(); }
 
-// called after every successful save: queue the report, then try to send it (never blocks the save)
+// called after every successful save: queue the report, send it, and file its PDF.
+// The PDF is built right now (while this report is still on screen); upload follows.
 function syncAfterSave(x){
-  if(!syncConfigured()) return;
   syncEnqueue(x);
-  if(syncReady()) syncRun(); else if(msalApp) syncRefreshUi();
-}
-
-async function syncInit(){
-  syncRefreshUi();
-  if(!syncConfigured()) return;
-  if(window.location.protocol !== 'https:' && window.location.hostname !== 'localhost'){
-    syncStatus('OneDrive sign-in only works when the app is opened from its https web address — not from a downloaded file.', 'err');
-    return;
-  }
-  if(!window.msal){
-    syncStatus("The Microsoft sign-in library didn't load — check your connection and reload.", 'err');
-    return;
-  }
+  if(!syncReady()){ syncRefreshUi(); return; }
+  let pdfPromise = null, fname = '';
   try{
-    msalApp = new msal.PublicClientApplication({
-      auth:{clientId:MS_CONFIG.clientId.trim(), authority:'https://login.microsoftonline.com/'+MS_CONFIG.tenantId.trim(),
-            redirectUri:syncRedirectUri(), navigateToLoginRequestUrl:false},
-      cache:{cacheLocation:'localStorage'}
+    if(window.jspdf){
+      const isL = x.r.visitType === 'LOLER';
+      fname = isL ? lolerFilename() : reportFilename();
+      pdfPromise = isL ? buildLolerPdfBlob() : buildPdfBlob();
+    }
+  }catch(e){ pdfPromise = null; }
+  syncRun().then(()=>{
+    if(pdfPromise) pdfPromise.then(p=> syncUploadPdf(p, fname, x.r)).catch(e=>{
+      syncStatus((sbEl('syncStatusText').textContent + ' PDF not filed: ' + e.message).trim(), 'err');
     });
-    const r = await msalApp.handleRedirectPromise();
-    if(r && r.account) msalApp.setActiveAccount(r.account);
-  }catch(e){
-    syncRefreshUi();
-    syncStatus('Microsoft sign-in failed: ' + (e.errorMessage || e.message || e), 'err');
-    document.getElementById('syncRedirectInfo').style.display = 'block';
-    document.getElementById('syncRedirectInfo').textContent = 'Redirect address that must be registered in the Microsoft app (Single-page application): ' + syncRedirectUri();
-    return;
-  }
-  syncRefreshUi();
-  if(syncAccount()) syncRun(); // catch up as soon as the app opens
+  });
 }
 
-document.getElementById('btnMsSignIn').addEventListener('click', async ()=>{
-  if(!msalApp) return;
-  if(state.customer && !confirm('Signing in reloads the page, so anything not saved yet in this report will be lost. Save it first, then continue?')) return;
-  try{ await msalApp.loginRedirect({scopes:SYNC_SCOPES, redirectUri:syncRedirectUri()}); }
-  catch(e){ syncStatus('Could not start sign-in: ' + (e.errorMessage || e.message), 'err'); }
+// ---- sign in / out / password ----
+sbEl('btnSbSignIn').addEventListener('click', async ()=>{
+  const email = sbEl('sbEmail').value.trim(), pw = sbEl('sbPassword').value;
+  if(!email || !pw){ syncStatus('Enter your email and password.', 'err'); return; }
+  const b = sbEl('btnSbSignIn'); b.disabled = true;
+  try{
+    const res = await fetch(SB.url + '/auth/v1/token?grant_type=password', {method:'POST', headers:{apikey:SB.key, 'Content-Type':'application/json'}, body:JSON.stringify({email, password:pw})});
+    const j = await res.json().catch(()=>({}));
+    if(!res.ok){
+      const m = j.error_description || j.msg || j.message || '';
+      syncStatus(/invalid/i.test(m) ? "That email or password isn't right." : (m || 'Could not sign in ('+res.status+').'), 'err');
+      return;
+    }
+    sbSetSession(j);
+    try{ storeSet('sb_last_email', email); }catch(e){}
+    sbEl('sbPassword').value = '';
+    syncRefreshUi(); syncRun();
+  }catch(e){ syncStatus('No connection — check your signal and try again.', 'err'); }
+  finally{ b.disabled = false; }
 });
-document.getElementById('btnMsSignOut').addEventListener('click', async ()=>{
-  if(!msalApp) return;
-  try{ await msalApp.logoutRedirect({account:syncAccount(), postLogoutRedirectUri:syncRedirectUri()}); }
-  catch(e){ syncStatus('Could not sign out: ' + (e.errorMessage || e.message), 'err'); }
+sbEl('sbPassword').addEventListener('keydown', e=>{ if(e.key === 'Enter') sbEl('btnSbSignIn').click(); });
+sbEl('btnSbForgot').addEventListener('click', async ()=>{
+  const email = sbEl('sbEmail').value.trim();
+  if(!email){ syncStatus('Type your email address above first, then tap Forgot password.', 'err'); return; }
+  try{
+    const res = await fetch(SB.url + '/auth/v1/recover', {method:'POST', headers:{apikey:SB.key, 'Content-Type':'application/json'}, body:JSON.stringify({email})});
+    syncStatus(res.ok ? 'If that email has an account, a reset link is on its way — open it on this device.' : 'Could not send the reset email ('+res.status+').', res.ok ? 'ok' : 'err');
+  }catch(e){ syncStatus('No connection — check your signal and try again.', 'err'); }
 });
-document.getElementById('btnSyncNow').addEventListener('click', syncRun);
+sbEl('btnMsSignOut').addEventListener('click', async ()=>{
+  try{ await sbFetch('/auth/v1/logout', {method:'POST'}); }catch(e){}
+  sbSetSession(null);
+  syncRefreshUi();
+});
+sbEl('btnSyncNow').addEventListener('click', syncRun);
+sbEl('btnSyncAll').addEventListener('click', e=>{
+  e.preventDefault();
+  try{ storeDelete('sb_last_pull'); }catch(err){}
+  syncRun();
+});
+sbEl('btnSbChangePw').addEventListener('click', ()=>{ sbEl('sbPwForm').style.display = ''; sbEl('sbNewPw').focus(); });
+sbEl('btnSbCancelPw').addEventListener('click', ()=>{ sbEl('sbPwForm').style.display = 'none'; sbEl('sbNewPw').value = ''; });
+sbEl('btnSbSavePw').addEventListener('click', async ()=>{
+  const pw = sbEl('sbNewPw').value;
+  if(pw.length < 8){ syncStatus('Use at least 8 characters for the new password.', 'err'); return; }
+  try{
+    const res = await sbFetch('/auth/v1/user', {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})});
+    if(!res.ok){ const j = await res.json().catch(()=>({})); throw new Error(j.msg || j.message || ('error '+res.status)); }
+    sbEl('sbNewPw').value = ''; sbEl('sbPwForm').style.display = 'none';
+    syncRefreshUi(); syncStatus(sbEl('syncStatusText').textContent + ' Password changed.', 'ok');
+  }catch(e){ syncStatus('Could not change the password: ' + e.message, 'err'); }
+});
 
-syncInit();
+// password-reset link opens the app with the session in the address; pick it up and ask for a new password
+function sbHandleHash(){
+  const h = window.location.hash || '';
+  if(h.indexOf('access_token=') < 0 && h.indexOf('error_description=') < 0) return;
+  const p = new URLSearchParams(h.replace(/^#/, ''));
+  try{ history.replaceState(null, '', window.location.pathname + window.location.search); }catch(e){}
+  if(p.get('error_description')){ syncStatus('That link has expired — tap Forgot password to get a new one.', 'err'); return; }
+  const at = p.get('access_token');
+  let claims = {};
+  try{ claims = JSON.parse(atob(at.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))); }catch(e){}
+  sbSetSession({access_token:at, refresh_token:p.get('refresh_token') || '', expires_in:Number(p.get('expires_in')) || 3600, user:{email:claims.email || '', id:claims.sub || ''}});
+  if(p.get('type') === 'recovery'){ syncRefreshUi(); sbEl('sbPwForm').style.display = ''; syncStatus('Choose a new password below.', 'ok'); }
+}
+
+// keep things fresh: when the app comes back to the front, when signal returns, and every 5 minutes
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && syncReady() && Date.now() - lastSyncAt > 60000) syncRun(); });
+window.addEventListener('online', ()=>{ if(syncReady()) syncRun(); });
+setInterval(()=>{ if(!document.hidden && syncReady()) syncRun(); }, 5*60*1000);
+
+(function syncInit(){
+  // drop anything queued by the earlier OneDrive-style sync (different shape)
+  try{ const pend = syncMap('sync_pending'); let dirty = false; Object.keys(pend).forEach(k=>{ if(!pend[k] || typeof pend[k] !== 'object'){ delete pend[k]; dirty = true; } }); if(dirty) storeSet('sync_pending', pend); }catch(e){}
+  sbHandleHash();
+  syncRefreshUi();
+  if(syncReady()) syncRun();
+})();
+
+
+// ================= ENGINEERS' CHAT =================
+const chat = {open:false, threads:[], cur:null, msgs:[], tick:0, announced:{}, photo:null, photoFor:'', loaded:false, busy:false};
+function chatMe(){ const s = sbSession(); return s ? (s.uid || '') : ''; }
+const CHAT_TEAM = ['Dave','Rob','Jordan','Ashleigh','John','Ricky','Martyn','Maxine'];
+function chatTeam(){
+  const extra = storeGet('chat_names_extra');
+  return CHAT_TEAM.concat(Array.isArray(extra) ? extra.filter(n=> CHAT_TEAM.indexOf(n) < 0) : []);
+}
+function chatName(){
+  const who = storeGet('chat_who');
+  if(typeof who === 'string' && who) return who;
+  // a personal login (rob@..., dave@...) names itself; the shared login doesn't
+  const p = storeGet('sb_profile'); const s = sbSession() || {};
+  const first = String((p && p.name) || s.email || '').split('@')[0].split(/[.\-_+]/)[0].toLowerCase();
+  const hit = chatTeam().find(n=> n.toLowerCase() === first);
+  return hit || '';
+}
+function chatWhoRender(forceOpen){
+  if(!sbEl('chatWho')) return;
+  const name = chatName();
+  sbEl('chatWhoName').textContent = name || '(pick your name)';
+  const pick = sbEl('chatWhoPick');
+  pick.style.display = (!name || forceOpen) ? '' : 'none';
+  sbEl('chatWhoChange').style.display = name ? '' : 'none';
+  if(pick.style.display === 'none') return;
+  const box = sbEl('chatWhoBtns'); box.textContent = '';
+  chatTeam().forEach(n=>{
+    const b = chatEl('button','btn-ghost', n); b.type = 'button';
+    if(n === name) b.style.background = 'var(--steel-100)';
+    b.addEventListener('click', ()=>{ try{ storeSet('chat_who', n); }catch(e){} chatWhoRender(false); chatSay(''); chatRefreshUi(); });
+    box.appendChild(b);
+  });
+  const other = chatEl('button','btn-ghost','+ Someone else'); other.type = 'button';
+  other.addEventListener('click', ()=>{
+    const v = (window.prompt('Type the name to show in the chat:') || '').trim().slice(0, 30);
+    if(!v) return;
+    const nm = v.charAt(0).toUpperCase() + v.slice(1);
+    const extra = storeGet('chat_names_extra'); const arr = Array.isArray(extra) ? extra : [];
+    if(chatTeam().indexOf(nm) < 0){ arr.push(nm); try{ storeSet('chat_names_extra', arr); }catch(e){} }
+    try{ storeSet('chat_who', nm); }catch(e){}
+    chatWhoRender(false); chatSay(''); chatRefreshUi();
+  });
+  box.appendChild(other);
+}
+function chatUuid(){
+  try{ if(crypto.randomUUID) return crypto.randomUUID(); }catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{ const r = Math.random()*16|0; return (c==='x' ? r : (r&3|8)).toString(16); });
+}
+function chatSeen(){ const m = storeGet('chat_seen'); return (m && typeof m === 'object') ? m : {}; }
+function chatMarkSeen(id, ts){ if(!id || !ts) return; const m = chatSeen(); if(!m[id] || m[id] < ts){ m[id] = ts; try{ storeSet('chat_seen', m); }catch(e){} } }
+function chatUnread(){
+  const seen = chatSeen(), me = chatMe();
+  return chat.threads.filter(t=> t.last_by !== me && (!seen[t.id] || t.last_at > seen[t.id]));
+}
+function chatSay(text, kind){
+  const el = sbEl('chatMsg'); el.textContent = text || '';
+  el.style.color = kind === 'err' ? 'var(--urgent)' : kind === 'ok' ? 'var(--serv)' : '';
+  el.style.fontWeight = kind ? '600' : '';
+}
+function chatWhen(iso){
+  const d = new Date(iso); if(isNaN(d)) return '';
+  const today = new Date(); const same = d.toDateString() === today.toDateString();
+  return same ? d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
+              : d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+function chatEl(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text != null) e.textContent = text; return e; }
+
+function chatRefreshUi(){
+  const btn = sbEl('btnChatToggle'); if(!btn) return;
+  const signed = syncReady();
+  const n = signed ? chatUnread().length : 0;
+  btn.textContent = `💬 ${chat.open ? 'Hide' : 'Open'} Engineers’ Chat` + (n ? ` — ${n} new` : '');
+  btn.style.borderColor = n ? 'var(--urgent)' : ''; btn.style.color = n ? 'var(--urgent)' : '';
+  if(!signed){ chat.threads = []; chat.cur = null; chat.loaded = false; chat.announced = {}; try{ storeDelete('chat_who'); }catch(e){} }
+  try{ chatWhoRender(false); }catch(e){}
+  if(chat.open && !signed) chatSay('Sign in under Team Sync below to use the team chat.');
+  if(chat.open && signed && !chat.loaded && !chat.loading){ chat.loading = true; chatSay(''); chatLoadThreads().catch(e=>{ chatSay(e.name === 'TypeError' ? 'No connection \u2014 try again when you have signal.' : e.message, 'err'); }).finally(()=>{ chat.loading = false; }); }
+  try{ if(n && navigator.setAppBadge) navigator.setAppBadge(((alertSummary && alertSummary.attention) || 0) + n); }catch(e){}
+}
+
+async function chatNotify(list){
+  if(!list.length || !alertWanted()) return;
+  try{
+    const one = list.length === 1 ? list[0] : null;
+    const title = one ? `Chat: ${one.title}` : `Key Engineering chat — ${list.length} topics with new messages`;
+    const body = one ? `${one.last_by_name || 'Someone'}: ${one.last_text || ''}` : list.slice(0,4).map(t=> `${t.title} — ${t.last_by_name || ''}`).join('\n');
+    await navigator.serviceWorker.register('sw.js');
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification(title, {body, tag:'ke-chat', icon:'icon-180.png'});
+  }catch(e){}
+}
+
+async function chatLoadThreads(quiet){
+  if(!syncReady()) return;
+  const res = await sbFetch('/rest/v1/threads?select=*&order=last_at.desc&limit=100');
+  if(!res.ok) throw await sbFail(res, 'Loading chat');
+  chat.threads = wkArr(await res.json());
+  if(!storeGet('chat_seen_init')){            // first ever load on this device: don't flag old topics as new
+    const m = chatSeen(); chat.threads.forEach(t=>{ m[t.id] = t.last_at; }); storeSet('chat_seen', m); storeSet('chat_seen_init', true);
+  }
+  if(chat.cur){ const t = chat.threads.find(x=> x.id === chat.cur.id); if(t) chat.cur = t; }
+  const fresh = chatUnread().filter(t=> chat.announced[t.id] !== t.last_at && !(chat.cur && chat.cur.id === t.id && chat.open && !document.hidden));
+  chatUnread().forEach(t=>{ chat.announced[t.id] = t.last_at; });
+  chat.loaded = true;
+  chatRenderList(); chatRefreshUi();
+  if(fresh.length) chatNotify(fresh);
+}
+
+function chatRenderList(){
+  const box = sbEl('chatList'); box.textContent = '';
+  const seen = chatSeen(), me = chatMe();
+  if(!chat.threads.length){ box.appendChild(chatEl('p','note-inline','No topics yet — tap “New topic” to ask the team something or flag a problem.')); return; }
+  chat.threads.forEach(t=>{
+    const unread = t.last_by !== me && (!seen[t.id] || t.last_at > seen[t.id]);
+    const b = chatEl('button', 'chat-row' + (unread ? ' unread' : '')); b.type = 'button';
+    const top = chatEl('div','ct', t.title);
+    if(unread) top.appendChild(chatEl('span','chat-dot','NEW'));
+    if(t.closed) top.appendChild(chatEl('span','chat-solved','✔ Solved'));
+    b.appendChild(top);
+    b.appendChild(chatEl('div','cs', `${t.last_by_name || ''}: ${t.last_text || ''}`));
+    b.appendChild(chatEl('div','cm', (t.tag ? t.tag + ' · ' : '') + chatWhen(t.last_at)));
+    b.addEventListener('click', ()=> chatOpenThread(t.id));
+    box.appendChild(b);
+  });
+}
+
+const chatPhotoCache = new Map();
+async function chatPhotoUrl(path){
+  if(chatPhotoCache.has(path)) return chatPhotoCache.get(path);
+  const res = await sbFetch('/storage/v1/object/authenticated/chat-photos/' + path.split('/').map(encodeURIComponent).join('/'));
+  if(!res.ok) throw new Error('photo');
+  const url = URL.createObjectURL(await res.blob());
+  chatPhotoCache.set(path, url); return url;
+}
+function chatBubble(m){
+  const me = m.author_id === chatMe();
+  const b = chatEl('div', 'chat-b' + (me ? ' me' : ''));
+  b.dataset.id = m.id;
+  if(!me) b.appendChild(chatEl('span','cn', m.author_name || 'Engineer'));
+  if(m.body) b.appendChild(document.createTextNode(m.body));
+  if(m.photo_path){
+    const img = document.createElement('img'); img.alt = 'photo';
+    img.addEventListener('click', ()=> img.classList.toggle('big'));
+    b.appendChild(img);
+    chatPhotoUrl(m.photo_path).then(u=>{ img.src = u; }).catch(()=>{ img.replaceWith(chatEl('em','', ' (photo couldn’t be loaded)')); });
+  }
+  b.appendChild(chatEl('span','cw', (me ? 'You' : '') + (me ? ' · ' : '') + chatWhen(m.created_at)));
+  return b;
+}
+function chatRenderThread(){
+  const t = chat.cur; if(!t) return;
+  sbEl('chatThreadTitle').textContent = t.title;
+  sbEl('chatThreadTag').textContent = (t.tag ? t.tag + ' · ' : '') + 'Started by ' + (t.created_by_name || 'someone') + (t.closed ? ' · ✔ Solved' : '');
+  sbEl('btnChatSolved').textContent = t.closed ? '↩ Re-open' : '✔ Mark solved';
+  const prof = storeGet('sb_profile');
+  sbEl('btnChatDelete').style.display = ((prof && prof.role === 'admin') || t.created_by === chatMe()) ? '' : 'none';
+}
+async function chatPullMsgs(full){
+  const t = chat.cur; if(!t || !syncReady()) return;
+  const last = (!full && chat.msgs.length) ? chat.msgs[chat.msgs.length-1].created_at : '';
+  let q = '/rest/v1/messages?select=*&thread_id=eq.' + encodeURIComponent(t.id) + '&order=created_at.asc&limit=500';
+  if(last) q += '&created_at=gt.' + encodeURIComponent(last);
+  const res = await sbFetch(q);
+  if(!res.ok) throw await sbFail(res, 'Loading messages');
+  const rows = wkArr(await res.json());
+  if(chat.cur !== t && (!chat.cur || chat.cur.id !== t.id)) return;
+  const box = sbEl('chatMsgs');
+  const atBottom = full || (box.scrollHeight - box.scrollTop - box.clientHeight < 80);
+  if(full){ chat.msgs = []; box.textContent = ''; }
+  let added = 0;
+  rows.forEach(m=>{
+    if(chat.msgs.some(x=> x.id === m.id)) return;
+    chat.msgs.push(m); box.appendChild(chatBubble(m)); added++;
+  });
+  if(full && !chat.msgs.length) box.appendChild(chatEl('p','note-inline','No messages yet.'));
+  if(added && atBottom) box.scrollTop = box.scrollHeight;
+  const latest = chat.msgs.length ? chat.msgs[chat.msgs.length-1].created_at : '';
+  if(latest) chatMarkSeen(t.id, latest);
+  if(added && !full) chatRefreshUi();
+}
+async function chatOpenThread(id){
+  const t = chat.threads.find(x=> x.id === id); if(!t) return;
+  chat.cur = t; chat.msgs = [];
+  sbEl('chatListView').style.display = 'none'; sbEl('chatThreadView').style.display = '';
+  sbEl('chatMsgs').textContent = ''; sbEl('chatReply').value = ''; chatClearPhoto();
+  chatRenderThread();
+  try{ chatSay(''); await chatPullMsgs(true); chatMarkSeen(t.id, t.last_at); chatRefreshUi(); }
+  catch(e){ chatSay(e.name === 'TypeError' ? 'No connection — try again when you have signal.' : e.message, 'err'); }
+}
+function chatBackToList(){
+  chat.cur = null; chat.msgs = [];
+  sbEl('chatThreadView').style.display = 'none'; sbEl('chatListView').style.display = '';
+  chatRenderList(); chatRefreshUi();
+  chatLoadThreads().catch(()=>{});
+}
+
+// ---- photos (shrunk before upload so they're quick on 4G) ----
+function chatShrink(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file); const img = new Image();
+    img.onload = ()=>{
+      const max = 1280; let w = img.naturalWidth, h = img.naturalHeight;
+      const k = Math.min(1, max / Math.max(w, h)); w = Math.round(w*k); h = Math.round(h*k);
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      c.toBlob(b=> b ? resolve(b) : reject(new Error('Could not read that photo')), 'image/jpeg', 0.75);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Could not read that photo')); };
+    img.src = url;
+  });
+}
+function chatClearPhoto(){ chat.photo = null; sbEl('chatPhotoName').textContent = ''; sbEl('chatNewPhotoName').textContent = ''; sbEl('chatFile').value = ''; }
+async function chatUploadPhoto(threadId){
+  if(!chat.photo) return null;
+  const path = threadId + '/' + chatUuid() + '.jpg';
+  const res = await sbFetch('/storage/v1/object/chat-photos/' + path, {method:'POST', headers:{'Content-Type':'image/jpeg','x-upsert':'true'}, body:chat.photo});
+  if(!res.ok) throw await sbFail(res, 'Uploading the photo');
+  return path;
+}
+
+async function chatPostMessage(threadId, body, photoPath){
+  const row = {id: chatUuid(), thread_id: threadId, body: body || null, photo_path: photoPath || null, author_name: chatName()};
+  const res = await sbFetch('/rest/v1/messages', {method:'POST', headers:{'Content-Type':'application/json', Prefer:'return=minimal'}, body:JSON.stringify(row)});
+  if(!res.ok && res.status !== 409) throw await sbFail(res, 'Sending');
+}
+async function chatSend(){
+  if(!chatName()){ chatWhoRender(true); chatSay('Pick your name at the top first, so the team knows who wrote it.', 'err'); return; }
+  const body = sbEl('chatReply').value.trim();
+  if(!body && !chat.photo){ chatSay('Type a message or add a photo first.', 'err'); return; }
+  if(chat.busy || !chat.cur) return; chat.busy = true;
+  const btn = sbEl('btnChatSend'); btn.disabled = true; btn.textContent = 'Sending…';
+  try{
+    const pp = await chatUploadPhoto(chat.cur.id);
+    await chatPostMessage(chat.cur.id, body, pp);
+    sbEl('chatReply').value = ''; chatClearPhoto(); chatSay('');
+    await chatPullMsgs(false);
+    const box = sbEl('chatMsgs'); box.scrollTop = box.scrollHeight;
+    chatLoadThreads().catch(()=>{});
+  }catch(e){ chatSay(e.name === 'TypeError' ? 'No connection — your message is still here, tap Send again when you have signal.' : e.message, 'err'); }
+  finally{ chat.busy = false; btn.disabled = false; btn.textContent = 'Send'; }
+}
+async function chatPostNew(){
+  if(!chatName()){ chatWhoRender(true); chatSay('Pick your name at the top first, so the team knows who wrote it.', 'err'); return; }
+  const title = sbEl('chatNewTitle').value.trim(), body = sbEl('chatNewBody').value.trim(), tag = sbEl('chatNewTag').value.trim();
+  if(!title){ chatSay('Give the topic a short title.', 'err'); return; }
+  if(!body && !chat.photo){ chatSay('Add some details or a photo.', 'err'); return; }
+  if(chat.busy) return; chat.busy = true;
+  const btn = sbEl('btnChatPost'); btn.disabled = true; btn.textContent = 'Posting…';
+  try{
+    const id = chatUuid();
+    let res = await sbFetch('/rest/v1/threads', {method:'POST', headers:{'Content-Type':'application/json', Prefer:'return=minimal'},
+      body:JSON.stringify({id, title, tag: tag || null, created_by_name: chatName(), last_by_name: chatName(), last_text: body || '📷 Photo'})});
+    if(!res.ok && res.status !== 409) throw await sbFail(res, 'Posting');
+    const pp = await chatUploadPhoto(id);
+    await chatPostMessage(id, body, pp);
+    ['chatNewTitle','chatNewBody','chatNewTag'].forEach(k=> sbEl(k).value = ''); chatClearPhoto();
+    sbEl('chatNewForm').style.display = 'none'; chatSay('Posted — the team will see it.', 'ok');
+    await chatLoadThreads();
+    chatOpenThread(id);
+  }catch(e){ chatSay(e.name === 'TypeError' ? 'No connection — nothing was posted, try again when you have signal.' : e.message, 'err'); }
+  finally{ chat.busy = false; btn.disabled = false; btn.textContent = 'Post to team'; }
+}
+
+// ---- buttons ----
+sbEl('btnChatToggle').addEventListener('click', async ()=>{
+  chat.open = !chat.open;
+  sbEl('chatBody').style.display = chat.open ? '' : 'none';
+  chatRefreshUi();
+  if(!chat.open) return;
+  if(!syncReady()){ chatSay('Sign in under Team Sync below to use the team chat.'); return; }
+  chatSay(chat.loaded ? '' : 'Loading…');
+  try{ await chatLoadThreads(); chatSay(''); }
+  catch(e){ chatSay(e.name === 'TypeError' ? "No connection — try again when you have signal." : e.message, 'err'); }
+});
+sbEl('chatWhoChange').addEventListener('click', e=>{ e.preventDefault(); chatWhoRender(true); });
+sbEl('btnChatRefresh').addEventListener('click', async ()=>{ try{ await chatLoadThreads(); chatSay('Up to date.', 'ok'); }catch(e){ chatSay(e.name === 'TypeError' ? 'No connection.' : e.message, 'err'); } });
+sbEl('btnChatNew').addEventListener('click', ()=>{ const f = sbEl('chatNewForm'); f.style.display = f.style.display === 'none' ? '' : 'none'; });
+sbEl('btnChatNewCancel').addEventListener('click', ()=>{ sbEl('chatNewForm').style.display = 'none'; chatClearPhoto(); });
+sbEl('btnChatPost').addEventListener('click', chatPostNew);
+sbEl('btnChatSend').addEventListener('click', chatSend);
+sbEl('btnChatBack').addEventListener('click', chatBackToList);
+sbEl('btnChatPhoto').addEventListener('click', ()=>{ chat.photoFor = 'reply'; sbEl('chatFile').click(); });
+sbEl('btnChatNewPhoto').addEventListener('click', ()=>{ chat.photoFor = 'new'; sbEl('chatFile').click(); });
+sbEl('chatFile').addEventListener('change', async e=>{
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  try{
+    chat.photo = await chatShrink(f);
+    const label = '📷 Photo ready (' + Math.round(chat.photo.size/1024) + ' KB)';
+    sbEl(chat.photoFor === 'new' ? 'chatNewPhotoName' : 'chatPhotoName').textContent = label;
+  }catch(err){ chatSay(err.message, 'err'); }
+});
+sbEl('btnChatSolved').addEventListener('click', async ()=>{
+  const t = chat.cur; if(!t) return;
+  try{
+    const res = await sbFetch('/rest/v1/threads?id=eq.' + encodeURIComponent(t.id), {method:'PATCH', headers:{'Content-Type':'application/json', Prefer:'return=minimal'}, body:JSON.stringify({closed: !t.closed})});
+    if(!res.ok) throw await sbFail(res, 'Updating');
+    t.closed = !t.closed; chatRenderThread(); chatSay(t.closed ? 'Marked as solved.' : 'Re-opened.', 'ok');
+  }catch(e){ chatSay(e.name === 'TypeError' ? 'No connection.' : e.message, 'err'); }
+});
+sbEl('btnChatDelete').addEventListener('click', async ()=>{
+  const t = chat.cur; if(!t) return;
+  if(!window.confirm('Delete this whole topic and all its messages for everyone?')) return;
+  try{
+    const res = await sbFetch('/rest/v1/threads?id=eq.' + encodeURIComponent(t.id), {method:'DELETE', headers:{Prefer:'return=minimal'}});
+    if(!res.ok) throw await sbFail(res, 'Deleting');
+    chat.threads = chat.threads.filter(x=> x.id !== t.id); chatBackToList(); chatSay('Topic deleted.', 'ok');
+  }catch(e){ chatSay(e.name === 'TypeError' ? 'No connection.' : e.message, 'err'); }
+});
+
+// polling: open conversation every 8s, topic list / badge every ~32s, and whenever the app comes to the front
+setInterval(()=>{
+  if(document.hidden || !syncReady()) return;
+  chat.tick++;
+  if(chat.open && chat.cur) chatPullMsgs(false).catch(()=>{});
+  if(chat.tick % 4 === 0) chatLoadThreads().catch(()=>{});
+}, 8000);
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden && syncReady()){ chatLoadThreads().catch(()=>{}); if(chat.open && chat.cur) chatPullMsgs(false).catch(()=>{}); } });
+window.addEventListener('online', ()=>{ if(syncReady()) chatLoadThreads().catch(()=>{}); });
+if(syncReady()) chatLoadThreads().catch(()=>{});
+chatRefreshUi();
 
 updateTopbarSub();
 })();

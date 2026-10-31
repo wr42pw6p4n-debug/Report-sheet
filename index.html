@@ -420,6 +420,7 @@
     <div class="section-head"><div class="section-tag"></div><h2>Team Sync — Cloud</h2></div>
     <div class="section-body">
       <p class="note-inline" id="syncStatusText" style="margin-top:0;">Checking sync status…</p>
+      <p class="note-inline" id="syncPdfText" style="margin-top:-2px;"></p>
       <div id="sbLoginForm" style="display:none;">
         <div class="field full"><label for="sbEmail">Email</label><input type="email" id="sbEmail" autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off"></div>
         <div class="field full" style="margin-top:8px;"><label for="sbPassword">Password</label><input type="password" id="sbPassword" autocomplete="current-password"></div>
@@ -435,6 +436,8 @@
           <button class="btn-ghost" id="btnMsSignOut" type="button">Sign out</button>
         </div>
         <p class="note-inline"><a href="#" id="btnSyncAll">Re-download everything from the cloud</a></p>
+        <button class="btn-ghost" id="btnBulkPdf" type="button">📄 File PDFs for all reports on this device</button>
+        <p class="note-inline" id="bulkPdfText" style="margin-top:4px;">Makes and files a PDF for every report saved on this device that isn't in the cloud yet. Safe to run more than once.</p>
       </div>
       <div id="sbPwForm" style="display:none; margin-top:10px;">
         <div class="field full"><label for="sbNewPw">New password (at least 8 characters)</label><input type="password" id="sbNewPw" autocomplete="new-password"></div>
@@ -1018,14 +1021,14 @@ function compressImage(file){
     reader.onload = e=>{
       const img = new Image();
       img.onload = ()=>{
-        const maxW = 900;
+        const maxW = 640;
         const scale = Math.min(1, maxW / img.width);
         const canvas = document.createElement('canvas');
         canvas.width = img.width * scale;
         canvas.height = img.height * scale;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
+        resolve(canvas.toDataURL('image/jpeg', 0.6));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -2341,7 +2344,7 @@ function buildQrLabelPdf(){
 
 async function buildPdfBlob(){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','pt','a4');
+  const doc = new jsPDF({unit:'pt', format:'a4', orientation:'p', compress:true});
   drawWatermark(doc);
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -2526,7 +2529,7 @@ function lolerFilename(){
 
 async function buildLolerPdfBlob(){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','pt','a4');
+  const doc = new jsPDF({unit:'pt', format:'a4', orientation:'p', compress:true});
   drawWatermark(doc);
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -3037,7 +3040,7 @@ function wkText(d){
 
 function wkBuildPdf(d){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF('p','pt','a4');
+  const doc = new jsPDF({unit:'pt', format:'a4', orientation:'p', compress:true});
   drawWatermark(doc);
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -3574,6 +3577,7 @@ async function syncUploadPdf(pdf, filename, r){
 // ---- UI ----
 function syncRefreshUi(){
   try{ chatRefreshUi(); }catch(e){}
+  try{ pdfUiRefresh(); }catch(e){}
   const form = sbEl('sbLoginForm'), inn = sbEl('sbSignedIn');
   const s = sbSession();
   const pend = syncPendingCount();
@@ -3607,6 +3611,7 @@ async function syncRun(){
     await syncCustomers();
     const down = await syncPullReports();
     await syncCompletions();
+    try{ await pdfFlush(); }catch(e){}
     storeSet('sync_last', new Date().toISOString()); lastSyncAt = Date.now();
     wkRender(); wkImportInfo();
     try{ renderDueDates(); }catch(e){}
@@ -3628,23 +3633,181 @@ function syncKick(){ if(syncReady()) syncRun(); else syncRefreshUi(); }
 
 // called after every successful save: queue the report, send it, and file its PDF.
 // The PDF is built right now (while this report is still on screen); upload follows.
-function syncAfterSave(x){
-  syncEnqueue(x);
-  if(!syncReady()){ syncRefreshUi(); return; }
-  let pdfPromise = null, fname = '';
-  try{
-    if(window.jspdf){
-      const isL = x.r.visitType === 'LOLER';
-      fname = isL ? lolerFilename() : reportFilename();
-      pdfPromise = isL ? buildLolerPdfBlob() : buildPdfBlob();
-    }
-  }catch(e){ pdfPromise = null; }
-  syncRun().then(()=>{
-    if(pdfPromise) pdfPromise.then(p=> syncUploadPdf(p, fname, x.r)).catch(e=>{
-      syncStatus((sbEl('syncStatusText').textContent + ' PDF not filed: ' + e.message).trim(), 'err');
-    });
+// ---- PDF filing queue ----
+// Every "Save report" also makes the PDF and files it in the cloud (Customer > Service/Inspection/LOLER).
+// The PDF is kept on this device until it has really uploaded, so no signal / signed out / a hiccup
+// never loses it — it simply goes up on the next sync. PDFs can be a couple of MB, so they live in
+// IndexedDB rather than the small localStorage.
+let pdfMem = [], pdfBusy = false, pdfAgain = false;
+function pdfDb(){
+  return new Promise((res, rej)=>{
+    if(!window.indexedDB) return rej(new Error('no indexedDB'));
+    const q = indexedDB.open('ke_pdf_queue', 1);
+    q.onupgradeneeded = ()=> q.result.createObjectStore('q', {keyPath:'path'});
+    q.onsuccess = ()=> res(q.result);
+    q.onerror = ()=> rej(q.error || new Error('indexedDB error'));
   });
 }
+async function pdfQPut(item){
+  try{
+    const db = await pdfDb();
+    await new Promise((res, rej)=>{ const tx = db.transaction('q','readwrite'); tx.objectStore('q').put(item); tx.oncomplete = res; tx.onerror = ()=> rej(tx.error); tx.onabort = ()=> rej(tx.error); });
+  }catch(e){ pdfMem = pdfMem.filter(x=> x.path !== item.path).concat([item]); }
+}
+async function pdfQAll(){
+  let out = [];
+  try{
+    const db = await pdfDb();
+    out = await new Promise((res, rej)=>{ const r = db.transaction('q','readonly').objectStore('q').getAll(); r.onsuccess = ()=> res(r.result || []); r.onerror = ()=> rej(r.error); });
+  }catch(e){}
+  return out.concat(pdfMem.filter(m=> !out.some(o=> o.path === m.path)));
+}
+async function pdfQDel(path){
+  pdfMem = pdfMem.filter(x=> x.path !== path);
+  try{
+    const db = await pdfDb();
+    await new Promise((res, rej)=>{ const tx = db.transaction('q','readwrite'); tx.objectStore('q').delete(path); tx.oncomplete = res; tx.onerror = ()=> rej(tx.error); });
+  }catch(e){}
+}
+function pdfNoteErr(msg){ try{ storeSet('pdf_last_err', msg ? {msg:String(msg).slice(0,200), at:new Date().toISOString()} : null); }catch(e){} }
+async function pdfUiRefresh(){
+  const el = document.getElementById('syncPdfText'); if(!el) return;
+  let n = 0; try{ n = (await pdfQAll()).length; }catch(e){}
+  const err = storeGet('pdf_last_err');
+  let t = n ? `📄 ${n} PDF${n===1?'':'s'} waiting to upload${syncReady() ? '' : ' (sign in under Team Sync)'}.` : '📄 PDFs: all filed.';
+  if(err && err.msg){ t += ' Last problem: ' + err.msg; }
+  el.textContent = t; el.style.color = (err && err.msg && n) ? 'var(--urgent)' : '';
+}
+// uploads everything waiting; returns {sent, left}
+async function pdfFlush(){
+  if(!syncReady()) { pdfUiRefresh(); return {sent:0, left:(await pdfQAll()).length, signedOut:true}; }
+  if(pdfBusy){ pdfAgain = true; return null; }
+  pdfBusy = true; let sent = 0, left = 0;
+  try{
+    const items = await pdfQAll();
+    for(const it of items){
+      try{
+        const res = await sbFetch('/storage/v1/object/report-pdfs/' + it.path, {method:'POST', headers:{'Content-Type':'application/pdf', 'x-upsert':'true'}, body:it.blob});
+        if(!res.ok) throw await sbFail(res, 'PDF upload');
+        await pdfQDel(it.path); sent++;
+      }catch(e){
+        left++;
+        if(e && e.name === 'TypeError'){ pdfNoteErr('no connection — will retry'); left = items.length - sent; break; }
+        pdfNoteErr(e && e.message || 'upload failed');
+      }
+    }
+    if(sent && !left) pdfNoteErr(null);
+  }finally{
+    pdfBusy = false;
+    if(pdfAgain){ pdfAgain = false; setTimeout(()=>{ pdfFlush().catch(()=>{}); }, 300); }
+  }
+  pdfUiRefresh();
+  return {sent, left};
+}
+function pdfLoadLib(){   // the PDF library comes from the internet; if it didn't load, try again for next time
+  if(document.getElementById('jspdfRetry')) return;
+  const sc = document.createElement('script'); sc.id = 'jspdfRetry';
+  sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; document.head.appendChild(sc);
+}
+
+// called after every successful save: queue the report, make its PDF now (while this report is still
+// on screen), keep the PDF until it has uploaded, and tell the engineer what happened.
+function syncAfterSave(x){
+  syncEnqueue(x);
+  let made = null;
+  try{
+    if(!window.jspdf){ pdfLoadLib(); throw new Error('the PDF tool did not load (no signal when the app opened?) — reopen the app with signal, then tap Save report again'); }
+    const isL = x.r.visitType === 'LOLER';
+    const fname = isL ? lolerFilename() : reportFilename();
+    made = {fname, p:(isL ? buildLolerPdfBlob() : buildPdfBlob()), r:x.r};   // built right now = snapshot of this report
+  }catch(e){ pdfNoteErr('PDF not made: ' + e.message); setTimeout(()=> setStatusMsg('Report saved, but its PDF could not be made: ' + e.message, 'err', 12000), 80); pdfUiRefresh(); syncKick(); return; }
+  made.p.then(async pdf=>{
+    const path = [sbFolderName(made.r.customer), made.r.visitType || 'Service', made.fname].map(encodeURIComponent).join('/');
+    await pdfQPut({path, blob:pdf.output('blob'), label:made.fname, at:Date.now()});
+    if(!syncReady()){ pdfUiRefresh(); setStatusMsg('Report saved. PDF kept on this device — it will file in the cloud once you sign in under Team Sync.', 'ok', 10000); return; }
+    syncKick();                                            // report data first,
+    const r = await pdfFlush();                            // then the PDF
+    if(r && !r.left) setStatusMsg('Report saved and PDF filed ✓', 'ok', 8000);
+    else if(r) setStatusMsg('Report saved. PDF is waiting to upload — ' + ((storeGet('pdf_last_err') || {}).msg || 'will retry') + '.', 'err', 12000);
+    else setStatusMsg('Report saved. PDF is being filed…', 'ok', 6000);
+  }).catch(e=>{ pdfNoteErr('PDF not made: ' + (e && e.message || e)); setStatusMsg('Report saved, but its PDF could not be made: ' + (e && e.message || e), 'err', 12000); pdfUiRefresh(); });
+}
+
+
+// ---- file PDFs for reports saved before PDFs were filed automatically ----
+// Works on the reports stored on THIS device (they still have their photos/signatures).
+// Photos are shrunk on a copy for the PDF only — the saved report is left exactly as it was.
+function pdfShrinkPhoto(dataUrl){
+  return new Promise(res=>{
+    if(typeof dataUrl !== 'string' || dataUrl.length < 110000){ res(dataUrl); return; }
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const k = Math.min(1, 640 / img.width);
+        const c = document.createElement('canvas'); c.width = Math.round(img.width*k); c.height = Math.round(img.height*k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const out = c.toDataURL('image/jpeg', 0.6); res(out.length < dataUrl.length ? out : dataUrl);
+      }catch(e){ res(dataUrl); }
+    };
+    img.onerror = ()=> res(dataUrl);
+    img.src = dataUrl;
+  });
+}
+async function pdfCloudNames(prefix, cache){
+  if(cache[prefix]) return cache[prefix];
+  const res = await sbFetch('/storage/v1/object/list/report-pdfs', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prefix, limit:1000, offset:0})});
+  if(!res.ok) throw await sbFail(res, 'Checking filed PDFs');
+  cache[prefix] = wkArr(await res.json()).map(o=> o && o.name).filter(Boolean);
+  return cache[prefix];
+}
+let bulkBusy = false;
+async function pdfBulkFile(){
+  const out = sbEl('bulkPdfText'), btn = sbEl('btnBulkPdf');
+  if(bulkBusy) return;
+  if(!syncReady()){ out.textContent = 'Sign in under Team Sync first.'; return; }
+  if(!window.jspdf){ pdfLoadLib(); out.textContent = 'The PDF tool has not loaded — check your signal, reopen the app and try again.'; return; }
+  bulkBusy = true; btn.disabled = true;
+  const savedState = state, savedChecklist = CHECKLIST;
+  let made = 0, skipped = 0, failed = 0;
+  try{
+    // newest copy of each visit that is stored on this device
+    const mine = new Map();
+    wkDedupe(wkAllReports().filter(x=> x.src === 'local' && String(x.id).indexOf('imp_') !== 0)).forEach(x=> mine.set(x.id, x));
+    const list = [...mine.values()];
+    const cache = {};
+    for(let i = 0; i < list.length; i++){
+      const x = list[i];
+      out.textContent = `Working… ${i+1} of ${list.length}  (${made} filed, ${skipped} already there${failed ? ', '+failed+' problem'+(failed===1?'':'s') : ''})`;
+      try{
+        const r = JSON.parse(JSON.stringify(x.r));
+        const isL = r.visitType === 'LOLER';
+        // check the name first so we don't rebuild what's already filed
+        state = r; CHECKLIST = checklistFor((r.loler && r.loler.equipmentType) || 'CRANE');
+        const fname = isL ? lolerFilename() : reportFilename();
+        const folder = sbFolderName(r.customer) + '/' + (r.visitType || 'Service');
+        state = savedState; CHECKLIST = savedChecklist;
+        const names = await pdfCloudNames(folder, cache);
+        if(names.indexOf(fname) >= 0){ skipped++; continue; }
+        for(const id of Object.keys(r.items || {})){ if(r.items[id] && r.items[id].photo) r.items[id].photo = await pdfShrinkPhoto(r.items[id].photo); }
+        let pdf;
+        state = r; CHECKLIST = checklistFor((r.loler && r.loler.equipmentType) || 'CRANE');
+        try{ pdf = await (isL ? buildLolerPdfBlob() : buildPdfBlob()); }
+        finally{ state = savedState; CHECKLIST = savedChecklist; }
+        const path = [sbFolderName(r.customer), r.visitType || 'Service', fname].map(encodeURIComponent).join('/');
+        await pdfQPut({path, blob:pdf.output('blob'), label:fname, at:Date.now()});
+        const fl = await pdfFlush();
+        if(fl && fl.left){ failed++; } else { made++; names.push(fname); }
+      }catch(e){ failed++; pdfNoteErr('bulk: ' + (e && e.message || e)); }
+      await new Promise(r=> setTimeout(r, 30));      // let the screen breathe between PDFs
+    }
+    out.textContent = `Finished: ${made} PDF${made===1?'':'s'} filed, ${skipped} were already there` + (failed ? `, ${failed} problem${failed===1?'':'s'} (see the PDF line above)` : '') + '.';
+  }catch(e){
+    out.textContent = (e && e.name === 'TypeError') ? 'No connection — try again with signal.' : ('Stopped: ' + (e && e.message || e));
+  }finally{
+    state = savedState; CHECKLIST = savedChecklist; bulkBusy = false; btn.disabled = false; pdfUiRefresh();
+  }
+}
+sbEl('btnBulkPdf').addEventListener('click', pdfBulkFile);
 
 // ---- sign in / out / password ----
 sbEl('btnSbSignIn').addEventListener('click', async ()=>{

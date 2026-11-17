@@ -30,11 +30,12 @@
 </style>
 </head>
 <body>
-<header><div class="in"><h1>KEY ENGINEERING</h1><p>Approve repairs</p></div></header>
+<header><div class="in"><h1>KEY ENGINEERING</h1><p id="sub">Approve repairs</p></div></header>
 <main id="app"><div class="card">Loading…</div></main>
 <script>
 var API='https://eyerpokgadrgxticqzez.supabase.co/functions/v1/repair-approval';
 var KEY='sb_publishable_FsyUdlUOTgA51pkAy5pNiA_AsHqq6Ed';
+var KIND='repairs';
 var token=(new URLSearchParams(location.search).get('t')||'').trim();
 var A=document.getElementById('app'), data=null, dec={};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -42,19 +43,21 @@ function call(body){ body.token=token; return fetch(API,{method:'POST',headers:{
 function fail(m){ A.innerHTML='<div class="card"><h2>Sorry</h2><p>'+esc(m)+'</p><p class="soft">Please contact Key Engineering and we will help.</p></div>'; }
 function when(s){ try{ return new Date(s).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}); }catch(e){ return ''; } }
 function show(){
-  var d=data, isDone=d.status==='answered';
-  var h='<div class="card"><h2>'+esc(d.customer)+'</h2><div class="soft">'+(d.site?esc(d.site)+' · ':'')+'Repairs found on inspection</div>';
+  var d=data, isDone=d.status==='answered'; KIND=d.kind||'repairs'; var SV=KIND==='service';
+  document.getElementById('sub').textContent=SV?'Book your inspection / service':'Approve repairs'; document.title=SV?'Key Engineering — Book your inspection / service':'Key Engineering — Approve repairs';
+  var T={yes:SV?'Yes, book us in':'Accept',no:SV?'Not now':'Decline',allY:SV?'Book all':'Accept all',allN:SV?'Not now for all':'Decline all',what:SV?'Due for inspection / service':'Repairs found on inspection'};
+  var h='<div class="card"><h2>'+esc(d.customer)+'</h2><div class="soft">'+(d.site?esc(d.site)+' · ':'')+T.what+'</div>';
   if(isDone){
     var a=d.items.filter(function(i){return i.decision==='accept';}).length;
-    h+='<p style="margin:12px 0 0"><b>Thank you. We received your answer'+(d.answered_by?' from '+esc(d.answered_by):'')+(d.answered_at?' on '+when(d.answered_at):'')+'.</b> '+a+' of '+d.items.length+' repairs accepted'+(d.po_number?' (PO '+esc(d.po_number)+')':'')+'. Key Engineering will be in touch to book the work in.</p></div>';
-    h+=d.items.map(function(i){return '<div class="card '+(i.decision==='accept'?'done':'')+'" style="padding:12px"><b>'+esc(i.crane?i.crane+' – ':'')+esc(i.group)+(i.group&&i.label?' – ':'')+esc(i.label)+'</b><div class="soft">'+(i.decision==='accept'?'✔ Accepted':'✖ Declined')+'</div></div>';}).join('');
+    h+='<p style="margin:12px 0 0"><b>Thank you. We received your answer'+(d.answered_by?' from '+esc(d.answered_by):'')+(d.answered_at?' on '+when(d.answered_at):'')+'.</b> '+a+' of '+d.items.length+(SV?' booked in':' repairs accepted')+(d.po_number?' (PO '+esc(d.po_number)+')':'')+'. Key Engineering will be in touch'+(SV?' to agree a date.':' to book the work in.')+'</p></div>';
+    h+=d.items.map(function(i){return '<div class="card '+(i.decision==='accept'?'done':'')+'" style="padding:12px"><b>'+esc(i.crane?i.crane+' – ':'')+esc(i.group)+(i.group&&i.label?' – ':'')+esc(i.label)+'</b><div class="soft">'+(i.decision==='accept'?(SV?'✔ Book us in':'✔ Accepted'):(SV?'✖ Not now':'✖ Declined'))+'</div></div>';}).join('');
     if(!d.locked) h+='<p class="soft">Need to change your answer? <a href="#" id="chg">Tap here</a>.</p>'; else h+='<p class="soft">To change anything, please call Key Engineering.</p>';
     A.innerHTML=h; var c=document.getElementById('chg'); if(c) c.onclick=function(e){e.preventDefault(); data.status='sent'; show();}; return;
   }
-  h+='<p class="soft" style="margin:10px 0 0">Please choose <b>Accept</b> or <b>Decline</b> for each repair below, then press Send. Accepted repairs will be booked in with you.</p>';
-  h+='<div class="all"><button type="button" id="allA">Accept all</button><button type="button" id="allD">Decline all</button></div></div>';
+  h+='<p class="soft" style="margin:10px 0 0">'+(SV?'Please choose <b>Yes, book us in</b> or <b>Not now</b> for each item below, then press Send. We will then contact you to agree a date.':'Please choose <b>Accept</b> or <b>Decline</b> for each repair below, then press Send. Accepted repairs will be booked in with you.')+'</p>';
+  h+='<div class="all"><button type="button" id="allA">'+T.allY+'</button><button type="button" id="allD">'+T.allN+'</button></div></div>';
   d.items.forEach(function(i,n){
-    h+='<div class="item card" style="margin-bottom:0;margin-top:10px"><b>'+(i.urgent?'<span class="tag u">URGENT</span>':'<span class="tag">ATTENTION</span>')+esc(i.crane?i.crane+' – ':'')+esc(i.group)+(i.group&&i.label?' – ':'')+esc(i.label)+'</b>'+(i.note?'<div class="n">'+esc(i.note)+'</div>':'')+'<div class="ch"><button type="button" data-n="'+n+'" data-v="accept" class="a">Accept</button><button type="button" data-n="'+n+'" data-v="decline" class="d">Decline</button></div></div>';
+    h+='<div class="item card" style="margin-bottom:0;margin-top:10px"><b>'+(SV?'':(i.urgent?'<span class="tag u">URGENT</span>':'<span class="tag">ATTENTION</span>'))+esc(i.crane?i.crane+' – ':'')+esc(i.group)+(i.group&&i.label?' – ':'')+esc(i.label)+'</b>'+(i.note?'<div class="n">'+esc(i.note)+'</div>':'')+'<div class="ch"><button type="button" data-n="'+n+'" data-v="accept" class="a">'+T.yes+'</button><button type="button" data-n="'+n+'" data-v="decline" class="d">'+T.no+'</button></div></div>';
   });
   h+='<div class="card" style="margin-top:14px"><label>Your name</label><input id="nm" autocomplete="name" placeholder="Who is approving?"><label>Your PO number (if you have one)</label><input id="po" placeholder="Optional"><label>Anything else we should know?</label><textarea id="nt" rows="3" placeholder="Optional"></textarea><div class="err" id="er"></div><button class="btn" id="go">Send my answer</button></div>';
   A.innerHTML=h;
@@ -65,7 +68,7 @@ function show(){
   paint();
   document.getElementById('go').onclick=function(){
     var er=document.getElementById('er'), b=this; er.textContent='';
-    if(d.items.some(function(_,n){return !dec[n];})) { er.textContent='Please choose Accept or Decline for every repair.'; return; }
+    if(d.items.some(function(_,n){return !dec[n];})) { er.textContent='Please choose an answer for every line.'; return; }
     var nm=document.getElementById('nm').value.trim(); if(!nm){ er.textContent='Please type your name.'; return; }
     b.disabled=true; b.textContent='Sending…';
     call({action:'respond',decisions:dec,name:nm,po_number:document.getElementById('po').value,note:document.getElementById('nt').value})

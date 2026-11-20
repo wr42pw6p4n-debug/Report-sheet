@@ -12,6 +12,10 @@ main{max-width:480px;margin:0 auto;padding:16px}
 .ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}.none{background:var(--mut)}
 dl{margin:0}.row{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}
 dt{color:var(--mut)}dd{margin:0;font-weight:600;text-align:right}
+.btnf{display:block;width:100%;border:0;border-radius:12px;background:var(--bad);color:#fff;font-weight:700;font-size:17px;padding:16px;margin-bottom:12px}
+label{display:block;font-weight:600;font-size:14px;margin:12px 0 4px}input[type=text],input[type=tel],textarea{width:100%;font:inherit;font-size:16px;padding:11px;border:1px solid var(--line);border-radius:10px}
+textarea{min-height:90px}.chk{display:flex;gap:10px;align-items:center;margin-top:14px;font-weight:600}.chk input{width:22px;height:22px}
+.send{display:block;width:100%;border:0;border-radius:12px;background:var(--brand);color:#fff;font-weight:700;font-size:16px;padding:14px;margin-top:16px}.err{color:var(--bad);font-size:14px;margin-top:10px}.note{background:#fff4d6;border:1px solid #f0c75e;border-radius:10px;padding:10px 12px;margin-top:12px;font-size:14px;line-height:1.4}.hp{position:absolute;left:-9999px}
 .foot{color:var(--mut);font-size:13px;text-align:center;margin-top:18px;line-height:1.5}
 </style></head><body>
 <header><h1>Key Engineering Chesterfield</h1><p>Equipment status</p></header>
@@ -29,6 +33,22 @@ fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.s
  if(due){var days=Math.ceil((new Date(due+'T00:00:00')-new Date(new Date().toDateString()))/864e5);
   if(days<0){cls='bad';txt='Examination overdue'}else if(days<=30){cls='warn';txt='Due within '+days+' day'+(days==1?'':'s')}else{cls='ok';txt='In date'}}
  m.innerHTML='<div class="card"><div class="eq">'+esc(j.crane_no||'Equipment')+'</div><div class="sub">ID: '+esc(j.id_no||'—')+'</div><span class="badge '+cls+'">'+txt+'</span></div>'+
- '<div class="card"><dl><div class="row"><dt>LOLER next due</dt><dd>'+fmt(j.loler_due||j.next_due)+'</dd></div><div class="row"><dt>Last LOLER</dt><dd>'+fmt(j.last_loler)+'</dd></div><div class="row"><dt>Last inspection</dt><dd>'+fmt(j.last_inspection)+'</dd></div><div class="row"><dt>Last service</dt><dd>'+fmt(j.last_service)+'</dd></div></dl></div>'+foot();
+ '<div class="card"><dl><div class="row"><dt>LOLER next due</dt><dd>'+fmt(j.loler_due||j.next_due)+'</dd></div><div class="row"><dt>Last LOLER</dt><dd>'+fmt(j.last_loler)+'</dd></div><div class="row"><dt>Last inspection</dt><dd>'+fmt(j.last_inspection)+'</dd></div><div class="row"><dt>Last service</dt><dd>'+fmt(j.last_service)+'</dd></div></dl></div>'+faultUi()+foot();
 }).catch(function(){m.innerHTML='<div class="card"><div class="eq">Could not load</div><div class="sub">Check your signal and scan again.</div></div>'+foot()});
+
+function faultUi(){return '<button class="btnf" id="fb">\u26a0\ufe0f Report a fault</button><div class="card" id="ff" style="display:none"><div class="eq" style="font-size:18px">Report a fault</div><div class="sub">This goes straight to the Key Engineering office. The time and date are added automatically.</div><div class="note"><b>Important:</b> please also tell your supervisor or maintenance department about this fault straight away, and do not use the crane until it has been checked.</div>'+
+ '<label>Your name</label><input type="text" id="fn" autocomplete="name"><label>Phone number (optional)</label><input type="tel" id="fp" autocomplete="tel"><label>What is wrong?</label><textarea id="fw" maxlength="600"></textarea>'+
+ '<label class="chk"><input type="checkbox" id="fs"> Crane stopped / taken out of use</label><input class="hp" id="fh" tabindex="-1" autocomplete="off"><div class="err" id="fe"></div><button class="send" id="fx">Send to Key Engineering</button></div>'}
+document.addEventListener('click',function(e){
+ if(e.target.id==='fb'){document.getElementById('ff').style.display='block';e.target.style.display='none';document.getElementById('fn').focus()}
+ if(e.target.id==='fx'){var b=e.target,er=document.getElementById('fe');er.textContent='';
+  var nm=document.getElementById('fn').value.trim(),wh=document.getElementById('fw').value.trim();
+  if(!nm){er.textContent='Please enter your name.';return}if(!wh){er.textContent='Please describe the fault.';return}
+  b.disabled=true;b.textContent='Sending\u2026';
+  fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({c:q.get('c'),n:q.get('n'),i:q.get('i'),action:'fault',name:nm,phone:document.getElementById('fp').value,what:wh,stopped:document.getElementById('fs').checked,website:document.getElementById('fh').value})})
+  .then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j}})}).then(function(x){
+   if(x.ok&&x.j.ok){document.getElementById('ff').innerHTML='<div class="eq" style="color:var(--ok)">\u2705 Sent</div><div class="sub" style="margin-top:6px">Key Engineering have been alerted and will be in touch. <b>Please also tell your supervisor or maintenance department now.</b> If it is dangerous, keep clear of the crane and call us now.</div>'}
+   else{er.textContent=(x.j&&x.j.error)||'Could not send. Please call Key Engineering.';b.disabled=false;b.textContent='Send to Key Engineering'}
+  }).catch(function(){er.textContent='No signal \u2014 please try again or call Key Engineering.';b.disabled=false;b.textContent='Send to Key Engineering'})}
+});
 </script></body></html>

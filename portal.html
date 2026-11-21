@@ -56,13 +56,23 @@
   .visitbar .meta{margin:0; color:var(--green); font-weight:600;}
   .empty{text-align:center; color:var(--soft); padding:30px 10px;}
   footer{max-width:860px; margin:0 auto; padding:6px 16px 30px; font-size:12px; color:var(--soft);}
+  .chip.Load{background:#6b4fbb;}
+  .flag.pass{background:#e4f5ea; color:var(--green);} .flag.fail{background:#fde8ea; color:var(--red);}
+  #certOv{position:fixed; inset:0; background:rgba(0,0,0,.6); overflow:auto; padding:14px; display:none; z-index:50;}
+  #certOv .sheet{background:#fff; color:#000; max-width:760px; margin:0 auto; border-radius:12px; padding:18px;}
+  #certOv .bar{display:flex; gap:8px; justify-content:space-between; margin-bottom:12px;}
+  #certOv h3{margin:0 0 2px; font-size:20px;}
+  #certOv table{width:100%; border-collapse:collapse; margin:10px 0;}
+  #certOv td{border:1px solid #bbb; padding:7px 9px; font-size:15px;} #certOv td+td{text-align:right; font-weight:600;}
+  .res{font-size:22px; font-weight:800; margin:6px 0;}
+  @media print{ body.printing>*:not(#certOv){display:none!important;} body.printing #certOv{position:static!important; background:#fff!important; padding:0!important; display:block!important;} body.printing #certOv .bar{display:none!important;} body.printing #certOv .sheet{max-width:none; border-radius:0; padding:0;} }
   @media (max-width:520px){ main{padding:12px;} .btn.small{width:100%;} }
 </style>
 </head>
 <body>
 <header><div class="in">
   <img src="icon-180.png" alt="">
-  <div><h1>Key Engineering (Chesterfield) Ltd</h1><p>Customer portal &mdash; your crane service, inspection &amp; LOLER reports</p></div>
+  <div><h1>Key Engineering (Chesterfield) Ltd</h1><p>Customer portal &mdash; your crane service, inspection, LOLER reports, load test certificates &amp; risk assessments</p></div>
 </div></header>
 
 <main>
@@ -95,7 +105,8 @@
     <div id="list"></div>
   </section>
 </main>
-<footer>For your security this page signs you out after 15 minutes of inactivity. Reports are listed newest first.</footer>
+<div id="certOv"><div class="sheet"><div class="bar"><button class="btn small" id="certPrint" type="button">Print / save as PDF</button><button class="btn ghost small" id="certClose" type="button">Close</button></div><div id="certBody"></div></div></div>
+<footer>For your security this page signs you out after 15 minutes of inactivity. Reports and certificates are listed newest first.</footer>
 
 <script>
 (function(){
@@ -124,7 +135,7 @@ function signOut(){
   $('visitForm').style.display = 'none'; $('vDone').textContent = ''; visitReset();
   $('pin').value = ''; $('err').textContent = '';
   $('listView').style.display = 'none'; $('loginView').style.display = '';
-  $('list').textContent = ''; $('tabs').textContent = '';
+  $('list').textContent = ''; $('tabs').textContent = ''; $('certOv').style.display = 'none'; $('certBody').textContent = '';
   clearTimeout(idle);
 }
 
@@ -136,6 +147,7 @@ function login(){
   call({action:'list', customer:co, pin:pin}).then(function(r){
     if(!r.ok){ $('err').textContent = (r.j && r.j.error) || 'Something went wrong. Please try again.'; return; }
     creds = {customer:co, pin:pin}; data = r.j;
+    filter = (!(data.reports||[]).length && (data.certificates||[]).length) ? 'Load tests' : (!(data.reports||[]).length && (data.risk_assessments||[]).length) ? 'Risk assessments' : 'All';
     $('pin').value = '';
     $('loginView').style.display = 'none'; $('listView').style.display = '';
     $('who').textContent = data.customer;
@@ -149,12 +161,18 @@ function render(){
   var types = ['All'];
   ['Service','Inspection','LOLER'].forEach(function(t){ if(reps.some(function(r){ return r.visit_type === t; })) types.push(t); });
   var tabs = $('tabs'); tabs.textContent = '';
-  if(types.length > 2) types.forEach(function(t){
-    var b = el('button', t === filter ? 'on' : '', t === 'All' ? 'All (' + reps.length + ')' : t); b.type = 'button';
+  var certs = (data && data.certificates) || [];
+  if(certs.length) types.push('Load tests');
+  var ras = (data && data.risk_assessments) || [];
+  if(ras.length) types.push('Risk assessments');
+  if(types.length > 2 || certs.length || ras.length) types.forEach(function(t){
+    var b = el('button', t === filter ? 'on' : '', t === 'All' ? 'All (' + reps.length + ')' : t === 'Load tests' ? 'Load tests (' + certs.length + ')' : t === 'Risk assessments' ? 'Risk assessments (' + ras.length + ')' : t); b.type = 'button';
     b.addEventListener('click', function(){ filter = t; render(); });
     tabs.appendChild(b);
   });
   var list = $('list'); list.textContent = '';
+  if(filter === 'Load tests'){ renderCerts(certs, list); return; }
+  if(filter === 'Risk assessments'){ renderRas(ras, list); return; }
   var shown = reps.filter(function(r){ return filter === 'All' || r.visit_type === filter; });
   if(!shown.length){ list.appendChild(el('div','empty','No reports to show yet.')); return; }
   shown.forEach(function(r){
@@ -200,6 +218,90 @@ function render(){
   });
 }
 
+function renderRas(ras, list){
+  if(!ras.length){ list.appendChild(el('div','empty','No risk assessments to show yet.')); return; }
+  ras.forEach(function(x){
+    var card = el('div','rep'), r1 = el('div','r1'), left = el('div');
+    left.appendChild(el('span','date', uk(x.date) || 'Undated'));
+    left.appendChild(el('span','chip Load','Risk assessment'));
+    r1.appendChild(left); r1.appendChild(el('div','meta', x.ref)); card.appendChild(r1);
+    var m = el('div','meta'), bits = [];
+    if(x.site) bits.push(['Site', x.site]);
+    if(x.location) bits.push(['Location', x.location]);
+    if(x.assessed_by) bits.push(['Assessed by', x.assessed_by]);
+    bits.forEach(function(p, i){ if(i) m.appendChild(document.createTextNode('  \u00b7  ')); m.appendChild(document.createTextNode(p[0] + ': ')); m.appendChild(el('b','',p[1])); });
+    if(bits.length) card.appendChild(m);
+    if(x.work) card.appendChild(el('div','meta', x.work));
+    var act = el('div','act'), b = el('button','btn small','Download PDF'); b.type = 'button';
+    b.addEventListener('click', function(){ getRaPdf(x, b); });
+    act.appendChild(b); card.appendChild(act); list.appendChild(card);
+  });
+}
+function getRaPdf(x, btn){
+  if(!creds) return;
+  var w = null; try{ w = window.open('', '_blank'); }catch(e){}
+  var old = btn.textContent; btn.disabled = true; btn.textContent = 'Preparing\u2026';
+  call({action:'ra_pdf', customer:creds.customer, pin:creds.pin, ra_id:x.id}).then(function(r){
+    if(!r.ok || !r.j.url){ if(w) w.close(); alert((r.j && r.j.error) || 'Could not open that PDF.'); return; }
+    if(w){ w.location.href = r.j.url; } else { window.location.href = r.j.url; }
+  }).catch(function(){ if(w) w.close(); alert('No connection. Please try again.'); })
+  .then(function(){ btn.disabled = false; btn.textContent = old; bump(); });
+}
+
+function renderCerts(certs, list){
+  if(!certs.length){ list.appendChild(el('div','empty','No load test certificates to show yet.')); return; }
+  certs.forEach(function(c){
+    var card = el('div','rep'), r1 = el('div','r1'), left = el('div');
+    left.appendChild(el('span','date', uk(c.test_date) || 'Undated'));
+    left.appendChild(el('span','chip Load', c.test_type === 'jib' ? 'Swing jib load test' : 'Crane beam load test'));
+    r1.appendChild(left); r1.appendChild(el('div','meta', c.cert_no)); card.appendChild(r1);
+    var m = el('div','meta'), bits = [];
+    if(c.equip) bits.push(['Crane / equipment', c.equip]);
+    if(c.site) bits.push(['Site', c.site]);
+    if(c.location) bits.push(['Location', c.location]);
+    if(c.swl) bits.push(['SWL', c.swl + ' kg']);
+    if(c.engineer) bits.push(['Engineer', c.engineer]);
+    bits.forEach(function(p, i){ if(i) m.appendChild(document.createTextNode('  \u00b7  ')); m.appendChild(document.createTextNode(p[0] + ': ')); m.appendChild(el('b','',p[1])); });
+    if(bits.length) card.appendChild(m);
+    var fl = el('div','flags'); fl.appendChild(el('span','flag ' + (c.result === 'pass' ? 'pass' : 'fail'), c.result === 'pass' ? 'PASS' : 'FAIL')); card.appendChild(fl);
+    var act = el('div','act'), b = el('button','btn small','View / print certificate'); b.type = 'button';
+    b.addEventListener('click', function(){ showCert(c, b); });
+    act.appendChild(b); card.appendChild(act); list.appendChild(card);
+  });
+}
+function showCert(c, btn){
+  if(!creds) return;
+  var old = btn.textContent; btn.disabled = true; btn.textContent = 'Opening\u2026';
+  call({action:'cert', customer:creds.customer, pin:creds.pin, cert_id:c.id}).then(function(x){
+    if(!x.ok || !x.j.certificate){ alert((x.j && x.j.error) || 'Could not open that certificate.'); return; }
+    drawCert(x.j.certificate);
+  }).catch(function(){ alert('No connection. Please try again.'); })
+  .then(function(){ btn.disabled = false; btn.textContent = old; bump(); });
+}
+function drawCert(c){
+  var r = c.results || {}, body = $('certBody'); body.textContent = '';
+  function f(n){ return String(Math.round((+n || 0) * 100) / 100); }
+  body.appendChild(el('h3','','Certificate of Load Test ' + (c.certNo || '')));
+  body.appendChild(el('div','meta', c.testType === 'jib' ? 'Swing Jib Load Test' : 'Overhead Crane Beam Load Test'));
+  var info = el('div','meta');
+  [['Customer', c.customer], ['Site', c.site], ['Location', c.location], ['Equipment / jib ref', c.equip], ['Date of test', uk(c.date)], ['Engineer', c.engineer]].forEach(function(p){
+    if(!p[1]) return; var d = el('div'); d.appendChild(document.createTextNode(p[0] + ': ')); d.appendChild(el('b','',p[1])); info.appendChild(d);
+  });
+  body.appendChild(info);
+  var t = document.createElement('table');
+  [[c.testType === 'jib' ? 'Jib length' : 'Beam length', f(r.beam) + ' mm'], ['Datum - no load', f(r.noLoad) + ' mm'], ['Datum - with load', f(r.withLoad) + ' mm'], ['Datum - after test', f(r.afterTest) + ' mm'],
+   ['Measured deflection under load', f(r.deflection) + ' mm'], ['Permitted tolerance', f(r.tolerance) + ' mm'], ['Residual deflection', f(r.residual) + ' mm'],
+   ['Safe working load (SWL)', f(r.swl) + ' kg'], ['Required test load (125% SWL)', f(r.testLoadRequired) + ' kg'], ['Test load applied', f(r.testLoad) + ' kg']]
+   .concat(c.uprate ? [['Uprated to', c.uprate + ' kg']] : []).concat(c.downrate ? [['Down rated to', c.downrate + ' kg']] : [])
+   .forEach(function(p){ var tr = document.createElement('tr'); tr.appendChild(el('td','',p[0])); tr.appendChild(el('td','',p[1])); t.appendChild(tr); });
+  body.appendChild(t);
+  body.appendChild(el('div','res','Result: ' + (r.pass ? 'PASS' : 'FAIL')));
+  body.appendChild(el('div','meta','Key Engineering (Chesterfield) Ltd \u2014 Electrical Overhead Cranes & Plant'));
+  $('certOv').style.display = 'block';
+}
+$('certClose').addEventListener('click', function(){ $('certOv').style.display = 'none'; });
+$('certPrint').addEventListener('click', function(){ document.body.classList.add('printing'); window.print(); setTimeout(function(){ document.body.classList.remove('printing'); }, 500); });
+
 function getPdf(r, btn){
   if(!creds) return;
   var w = null; try{ w = window.open('', '_blank'); }catch(e){}   // opened now so iPads don't block it
@@ -214,12 +316,6 @@ function getPdf(r, btn){
 try{                                   // links from emails arrive with ?c=Company+name already filled in
   var pre = new URLSearchParams(window.location.search).get('c');
   if(pre){ $('co').value = pre.slice(0, 100); setTimeout(function(){ $('pin').focus(); }, 50); }
-  var hp = /(?:^|[#&])p=([0-9A-Za-z]{1,12})/.exec(window.location.hash || '');   // staff "open portal" button from the Control Room
-  if(pre && hp){
-    $('pin').value = hp[1];
-    try{ history.replaceState(null, '', window.location.pathname); }catch(e){}   // wipe the PIN from the address bar
-    setTimeout(function(){ login(); }, 80);
-  }
 }catch(e){}
 $('go').addEventListener('click', login);
 $('pin').addEventListener('keydown', function(e){ if(e.key === 'Enter') login(); });

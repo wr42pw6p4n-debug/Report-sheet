@@ -389,6 +389,12 @@ function getPdf(r, btn){
 try{                                   // links from emails arrive with ?c=Company+name already filled in
   var pre = new URLSearchParams(window.location.search).get('c');
   if(pre){ $('co').value = pre.slice(0, 100); setTimeout(function(){ $('pin').focus(); }, 50); }
+  var hp = /(?:^|[#&])p=([0-9A-Za-z]{1,12})/.exec(window.location.hash || '');   // staff "open portal" button from the Control Room
+  if(pre && hp){
+    $('pin').value = hp[1];
+    try{ history.replaceState(null, '', window.location.pathname); }catch(e){}   // wipe the PIN from the address bar
+    setTimeout(function(){ login(); }, 80);
+  }
 }catch(e){}
 $('go').addEventListener('click', login);
 $('pin').addEventListener('keydown', function(e){ if(e.key === 'Enter') login(); });

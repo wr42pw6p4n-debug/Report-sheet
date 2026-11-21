@@ -165,7 +165,8 @@ function render(){
   if(certs.length) types.push('Load tests');
   var ras = (data && data.risk_assessments) || [];
   if(ras.length) types.push('Risk assessments');
-  if(types.length > 2 || certs.length || ras.length) types.forEach(function(t){
+  if(reps.some(function(r){ return r.crane_no; })) types.push('Crane history');
+  if(types.length > 2 || certs.length || ras.length || types.indexOf('Crane history') > -1) types.forEach(function(t){
     var b = el('button', t === filter ? 'on' : '', t === 'All' ? 'All (' + reps.length + ')' : t === 'Load tests' ? 'Load tests (' + certs.length + ')' : t === 'Risk assessments' ? 'Risk assessments (' + ras.length + ')' : t); b.type = 'button';
     b.addEventListener('click', function(){ filter = t; render(); });
     tabs.appendChild(b);
@@ -173,6 +174,7 @@ function render(){
   var list = $('list'); list.textContent = '';
   if(filter === 'Load tests'){ renderCerts(certs, list); return; }
   if(filter === 'Risk assessments'){ renderRas(ras, list); return; }
+  if(filter === 'Crane history'){ renderCranes(reps, list); return; }
   var shown = reps.filter(function(r){ return filter === 'All' || r.visit_type === filter; });
   if(!shown.length){ list.appendChild(el('div','empty','No reports to show yet.')); return; }
   shown.forEach(function(r){
@@ -218,6 +220,54 @@ function render(){
   });
 }
 
+var STAT = {URGENT:'Urgent repair', ATTN:'Needs attention', MONITOR:'Keep an eye on', SERV:'Serviced'};
+function renderCranes(reps, list){
+  var by = {};
+  reps.forEach(function(r){ if(!r.crane_no) return; var k = r.crane_no.trim().toLowerCase(); (by[k] = by[k] || {name:r.crane_no, id:r.id_no, n:0, last:''}); by[k].n++; if((r.report_date||'') > by[k].last) by[k].last = r.report_date || ''; });
+  var arr = Object.keys(by).map(function(k){ return by[k]; }).sort(function(a, b){ return a.name.localeCompare(b.name, undefined, {numeric:true}); });
+  list.appendChild(el('div','meta','Choose a crane to see every visit and the work carried out, taken from our report sheets.'));
+  arr.forEach(function(c){
+    var card = el('div','rep'), r1 = el('div','r1'), left = el('div');
+    left.appendChild(el('span','date', c.name)); r1.appendChild(left);
+    r1.appendChild(el('div','meta', c.n + (c.n === 1 ? ' visit' : ' visits'))); card.appendChild(r1);
+    var m = el('div','meta'); if(c.id) { m.appendChild(document.createTextNode('ID: ')); m.appendChild(el('b','',c.id)); m.appendChild(document.createTextNode('  \u00b7  ')); }
+    m.appendChild(document.createTextNode('Last visit: ')); m.appendChild(el('b','', uk(c.last) || '\u2014')); card.appendChild(m);
+    var act = el('div','act'), b = el('button','btn small','View history'); b.type = 'button';
+    b.addEventListener('click', function(){ showHistory(c.name, b); });
+    act.appendChild(b); card.appendChild(act); list.appendChild(card);
+  });
+}
+function showHistory(name, btn){
+  if(!creds) return;
+  var old = btn.textContent; btn.disabled = true; btn.textContent = 'Loading\u2026';
+  call({action:'history', customer:creds.customer, pin:creds.pin, crane_no:name}).then(function(x){
+    if(!x.ok){ alert((x.j && x.j.error) || 'Could not load that history.'); return; }
+    var list = $('list'); list.textContent = '';
+    var back = el('button','btn small','\u2190 All cranes'); back.type = 'button'; back.addEventListener('click', render); list.appendChild(back);
+    list.appendChild(el('h3','', 'History: ' + name + (x.j.id_no ? ' (ID ' + x.j.id_no + ')' : '')));
+    var vs = x.j.visits || [];
+    if(!vs.length){ list.appendChild(el('div','empty','No visits found for this crane.')); return; }
+    vs.forEach(function(v){
+      var c = el('div','rep'), r1 = el('div','r1'), left = el('div');
+      left.appendChild(el('span','date', uk(v.report_date) || 'Undated')); left.appendChild(el('span','chip ' + (v.visit_type || ''), v.visit_type || 'Service'));
+      r1.appendChild(left); if(v.report_no) r1.appendChild(el('div','meta', v.report_no)); c.appendChild(r1);
+      var m = el('div','meta'); m.appendChild(document.createTextNode('Engineer: ')); m.appendChild(el('b','', v.engineer || '\u2014'));
+      if(v.site){ m.appendChild(document.createTextNode('  \u00b7  Site: ')); m.appendChild(el('b','', v.site)); } c.appendChild(m);
+      if(v.serviced && v.serviced.length){
+        var d = el('div','meta'); d.appendChild(el('b','','Serviced / checked: '));
+        d.appendChild(document.createTextNode(v.serviced.map(function(s){ return s.l; }).join(', '))); c.appendChild(d);
+      }
+      (v.findings || []).forEach(function(f){
+        var d = el('div','meta'); d.appendChild(el('b','', (STAT[f.s] || 'Noted') + ' \u2013 ' + f.l + ': '));
+        d.appendChild(document.createTextNode([f.n, f.w ? 'Work done: ' + f.w : ''].filter(Boolean).join(' \u2014 '))); c.appendChild(d);
+      });
+      if(v.notes){ var n = el('div','meta'); n.appendChild(el('b','','Engineer\u2019s notes: ')); n.appendChild(document.createTextNode(v.notes)); c.appendChild(n); }
+      list.appendChild(c);
+    });
+    window.scrollTo(0, 0);
+  }).catch(function(){ alert('No connection. Please try again.'); })
+  .then(function(){ btn.disabled = false; btn.textContent = old; bump(); });
+}
 function renderRas(ras, list){
   if(!ras.length){ list.appendChild(el('div','empty','No risk assessments to show yet.')); return; }
   ras.forEach(function(x){

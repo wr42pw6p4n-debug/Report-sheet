@@ -29,11 +29,17 @@ function foot(){return '<p class="foot">For repairs, servicing or examinations c
 fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({c:q.get('c'),n:q.get('n'),i:q.get('i')})})
 .then(function(r){return r.json()}).then(function(j){
  if(!j.found){m.innerHTML='<div class="card"><div class="eq">No record found</div><div class="sub">We could not find this equipment. Please contact Key Engineering.</div></div>'+foot();return}
- var due=j.loler_due||j.next_due,cls='none',txt='No due date on file';
+ var TL={Service:'Service',Inspection:'Inspection',LOLER:'LOLER examination'};
+ var due=j.next_due,cls='none',txt='No due date on file',dl=TL[j.next_due_type]||'Next visit';
  if(due){var days=Math.ceil((new Date(due+'T00:00:00')-new Date(new Date().toDateString()))/864e5);
-  if(days<0){cls='bad';txt='Examination overdue'}else if(days<=30){cls='warn';txt='Due within '+days+' day'+(days==1?'':'s')}else{cls='ok';txt='In date'}}
- m.innerHTML='<div class="card"><div class="eq">'+esc(j.crane_no||'Equipment')+'</div><div class="sub">ID: '+esc(j.id_no||'—')+'</div><span class="badge '+cls+'">'+txt+'</span></div>'+
- '<div class="card"><dl><div class="row"><dt>LOLER next due</dt><dd>'+fmt(j.loler_due||j.next_due)+'</dd></div><div class="row"><dt>Last LOLER</dt><dd>'+fmt(j.last_loler)+'</dd></div><div class="row"><dt>Last inspection</dt><dd>'+fmt(j.last_inspection)+'</dd></div><div class="row"><dt>Last service</dt><dd>'+fmt(j.last_service)+'</dd></div></dl></div>'+faultUi()+foot();
+  if(days<0){cls='bad';txt=dl+' overdue'}else if(days<=30){cls='warn';txt=dl+' due within '+days+' day'+(days==1?'':'s')}else{cls='ok';txt=dl+' in date'}}
+ var lt=TL[j.last_visit_type]||j.last_visit_type||'Visit';
+ var rows='<div class="row"><dt>Last visit</dt><dd>'+esc(lt)+'<br>'+fmt(j.last_visit_date)+'</dd></div>';
+ if(due) rows+='<div class="row"><dt>Next '+esc(dl.toLowerCase())+' due</dt><dd>'+fmt(due)+'</dd></div>';
+ [['Last LOLER examination',j.last_loler,j.loler_due],['Last inspection',j.last_inspection,j.inspection_due],['Last service',j.last_service,j.service_due]].forEach(function(x){
+  if(x[1]) rows+='<div class="row"><dt>'+x[0]+'</dt><dd>'+fmt(x[1])+(x[2]?'<br><span style="font-weight:400;color:var(--mut)">next due '+fmt(x[2])+'</span>':'')+'</dd></div>'});
+ m.innerHTML='<div class="card"><div class="eq">'+esc(j.crane_no||'Equipment')+'</div><div class="sub">ID: '+esc(j.id_no||'\u2014')+'</div><span class="badge '+cls+'">'+txt+'</span></div>'+
+ '<div class="card"><dl>'+rows+'</dl></div>'+faultUi()+foot();
 }).catch(function(){m.innerHTML='<div class="card"><div class="eq">Could not load</div><div class="sub">Check your signal and scan again.</div></div>'+foot()});
 
 function faultUi(){return '<button class="btnf" id="fb">\u26a0\ufe0f Report a fault</button><div class="card" id="ff" style="display:none"><div class="eq" style="font-size:18px">Report a fault</div><div class="sub">This goes straight to the Key Engineering office. The time and date are added automatically.</div><div class="note"><b>Important:</b> please also tell your supervisor or maintenance department about this fault straight away, and do not use the crane until it has been checked.</div>'+

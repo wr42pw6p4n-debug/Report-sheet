@@ -72,7 +72,7 @@
 <body>
 <header><div class="in">
   <img src="icon-180.png" alt="">
-  <div><h1>Key Engineering (Chesterfield) Ltd</h1><p>Customer portal &mdash; your crane service, inspection, LOLER reports, load test certificates &amp; risk assessments</p></div>
+  <div><h1>Key Engineering (Chesterfield) Ltd</h1><p>Customer portal &mdash; your crane service, inspection, LOLER reports, load test certificates, risk assessments &amp; job sheets</p></div>
 </div></header>
 
 <main>
@@ -147,7 +147,7 @@ function login(){
   call({action:'list', customer:co, pin:pin}).then(function(r){
     if(!r.ok){ $('err').textContent = (r.j && r.j.error) || 'Something went wrong. Please try again.'; return; }
     creds = {customer:co, pin:pin}; data = r.j;
-    filter = (!(data.reports||[]).length && (data.certificates||[]).length) ? 'Load tests' : (!(data.reports||[]).length && (data.risk_assessments||[]).length) ? 'Risk assessments' : 'All';
+    filter = (!(data.reports||[]).length && (data.certificates||[]).length) ? 'Load tests' : (!(data.reports||[]).length && (data.job_sheets||[]).length) ? 'Job sheets' : (!(data.reports||[]).length && (data.risk_assessments||[]).length) ? 'Risk assessments' : 'All';
     $('pin').value = '';
     $('loginView').style.display = 'none'; $('listView').style.display = '';
     $('who').textContent = data.customer;
@@ -166,8 +166,10 @@ function render(){
   var ras = (data && data.risk_assessments) || [];
   if(ras.length) types.push('Risk assessments');
   if(reps.some(function(r){ return r.crane_no; })) types.push('Crane history');
-  if(types.length > 2 || certs.length || ras.length || types.indexOf('Crane history') > -1) types.forEach(function(t){
-    var b = el('button', t === filter ? 'on' : '', t === 'All' ? 'All (' + reps.length + ')' : t === 'Load tests' ? 'Load tests (' + certs.length + ')' : t === 'Risk assessments' ? 'Risk assessments (' + ras.length + ')' : t); b.type = 'button';
+  var jobs = (data && data.job_sheets) || [];
+  if(jobs.length) types.push('Job sheets');
+  if(types.length > 2 || certs.length || ras.length || jobs.length || types.indexOf('Crane history') > -1) types.forEach(function(t){
+    var b = el('button', t === filter ? 'on' : '', t === 'All' ? 'All (' + reps.length + ')' : t === 'Load tests' ? 'Load tests (' + certs.length + ')' : t === 'Risk assessments' ? 'Risk assessments (' + ras.length + ')' : t === 'Job sheets' ? 'Job sheets (' + jobs.length + ')' : t); b.type = 'button';
     b.addEventListener('click', function(){ filter = t; render(); });
     tabs.appendChild(b);
   });
@@ -175,6 +177,7 @@ function render(){
   if(filter === 'Load tests'){ renderCerts(certs, list); return; }
   if(filter === 'Risk assessments'){ renderRas(ras, list); return; }
   if(filter === 'Crane history'){ renderCranes(reps, list); return; }
+  if(filter === 'Job sheets'){ renderJobs(jobs, list); return; }
   var shown = reps.filter(function(r){ return filter === 'All' || r.visit_type === filter; });
   if(!shown.length){ list.appendChild(el('div','empty','No reports to show yet.')); return; }
   shown.forEach(function(r){
@@ -267,6 +270,26 @@ function showHistory(name, btn){
     window.scrollTo(0, 0);
   }).catch(function(){ alert('No connection. Please try again.'); })
   .then(function(){ btn.disabled = false; btn.textContent = old; bump(); });
+}
+function renderJobs(jobs, list){
+  if(!jobs.length){ list.appendChild(el('div','empty','No completed job sheets to show yet.')); return; }
+  jobs.forEach(function(j){
+    var card = el('div','rep'), r1 = el('div','r1'), left = el('div');
+    left.appendChild(el('span','date', uk(j.date) || 'Undated'));
+    left.appendChild(el('span','chip Load', j.type || 'Job'));
+    r1.appendChild(left); if(j.job) r1.appendChild(el('div','meta', 'Job ' + j.job)); card.appendChild(r1);
+    var m = el('div','meta'), bits = [];
+    if(j.site) bits.push(['Site', j.site]);
+    if(j.equipment) bits.push(['Equipment', j.equipment]);
+    if(j.engineers && j.engineers.length) bits.push(['Engineer' + (j.engineers.length > 1 ? 's' : ''), j.engineers.join(', ')]);
+    bits.forEach(function(p, i){ if(i) m.appendChild(document.createTextNode('  \u00b7  ')); m.appendChild(document.createTextNode(p[0] + ': ')); m.appendChild(el('b','',p[1])); });
+    if(bits.length) card.appendChild(m);
+    if(j.work){ var w = el('div','meta'); w.appendChild(el('b','','Work carried out: ')); w.appendChild(document.createTextNode(j.work)); w.style.whiteSpace = 'pre-wrap'; card.appendChild(w); }
+    if(j.defects){ var d = el('div','meta'); d.appendChild(el('b','','Defects / notes: ')); d.appendChild(document.createTextNode(j.defects)); d.style.whiteSpace = 'pre-wrap'; card.appendChild(d); }
+    if(j.materials && j.materials.length){ var mt = el('div','meta'); mt.appendChild(el('b','','Parts / materials: ')); mt.appendChild(document.createTextNode(j.materials.join(', '))); card.appendChild(mt); }
+    if(j.signed_by){ var s = el('div','meta'); s.appendChild(document.createTextNode('Signed off by: ')); s.appendChild(el('b','',j.signed_by)); card.appendChild(s); }
+    list.appendChild(card);
+  });
 }
 function renderRas(ras, list){
   if(!ras.length){ list.appendChild(el('div','empty','No risk assessments to show yet.')); return; }
